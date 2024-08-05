@@ -104,6 +104,7 @@ public class TriggerManager {
         try (PreparedStatement stmt = m_conn.prepareStatement(
                 "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from qsys2.systriggers where TRIGGER_SCHEMA like ? AND EVENT_OBJECT_SCHEMA like ? AND EVENT_OBJECT_TABLE like ?")) {
             stmt.setString(1, m_dq_library.trim().toUpperCase());
+// TODO the schema and table name could be delimited, so the query values need to be set accordingly
             stmt.setString(2, _schema);
             stmt.setString(3, _table);
             ResultSet rs = stmt.executeQuery();
@@ -126,6 +127,7 @@ public class TriggerManager {
     private String getColumnData(String _srcLib, String _srcTable) throws SQLException {
         String ret = "";
         boolean isFirst = true;
+        // TODO Why not just query SYSCOLUMNS for the details?
         try (PreparedStatement stmt = m_conn
                 .prepareStatement(String.format("select * from %s.%s limit 1", _srcLib, _srcTable))) { // TODO: mitigate
                                                                                                        // SQL injection

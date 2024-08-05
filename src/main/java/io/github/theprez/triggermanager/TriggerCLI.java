@@ -78,6 +78,7 @@ public class TriggerCLI {
                 isInputOk = false;
             }
         }
+        // TODO need to normalize the schema and table names.  If not delimited, convert to uppercase.
         if (!isInputOk) {
             System.exit(19);
         }
