@@ -15,3 +15,8 @@ buildNumber.properties
 .project
 # JDT-specific (Eclipse Java Development Tools)
 .classpath
+
+# VS Code environment variables
+dev.env
+# VS Code launch configurations
+.vscode/launch.json
