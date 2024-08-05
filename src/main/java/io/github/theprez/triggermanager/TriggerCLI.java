@@ -4,6 +4,7 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.NoSuchElementException;
+import java.util.Objects;
 
 import com.github.theprez.jcmdutils.AppLogger;
 import com.github.theprez.jcmdutils.StringUtils;
@@ -13,17 +14,27 @@ import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
 
 public class TriggerCLI {
     private enum CLIActions {
+        /** List the tables currently being monitored */
         LIST,
+        /** Add the table to monitoring */
         ADD,
+        /** Get monitoring details for the table */
         GET,
+        /** Remove the table from monitoring */
         REMOVE
     }
 
     public static void main(String[] _args) {
-        String library = "triggerman";
+        // TODO The library where the triggers, variables, and data queues are saved needs to be configurable
+        final String LIBRARY = "triggerman";
 
         LinkedList<String> argsList = new LinkedList<>(Arrays.asList(_args));
         AppLogger logger = AppLogger.getSingleton(argsList.remove("-v") );
+
+        if (argsList.isEmpty()) {
+            logger.println_err("ERROR: input arguments are required");
+            System.exit(17);
+        }
 
         CLIActions action = null;
         String schema = null;
@@ -54,20 +65,26 @@ public class TriggerCLI {
         // validate inputs
         //
         boolean isInputOk = true;
-        if (CLIActions.LIST != action) {
+        if (Objects.isNull(action)) {
+            logger.println_err("ERROR: No action specified");
+            isInputOk = false;
+        } else if (CLIActions.LIST != action) {
             if (StringUtils.isEmpty(table)) {
                 logger.println_err("ERROR: No table specified");
+                isInputOk = false;
             }
             if (StringUtils.isEmpty(schema)) {
                 logger.println_err("ERROR: No schema specified");
+                isInputOk = false;
             }
         }
-        // if (!isInputOk) {
-        //     System.exit(19);
-        // }
+        if (!isInputOk) {
+            System.exit(19);
+        }
         try (AS400 as400 = IBMiDotEnv.getCachedSystemConnection(true)) {
-            SelfInstaller installer = new SelfInstaller(logger, as400, library);
-            TriggerManager tMan = new TriggerManager(logger, as400, library);
+            SelfInstaller installer = new SelfInstaller(logger, as400, LIBRARY);
+            installer.install();
+            TriggerManager tMan = new TriggerManager(logger, as400, LIBRARY);
             // tMan.createTrigger("JES", "simple");
             switch (action) {
                 case ADD:
