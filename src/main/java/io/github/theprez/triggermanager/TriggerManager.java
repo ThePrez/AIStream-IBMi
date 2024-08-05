@@ -16,7 +16,6 @@ import java.util.concurrent.atomic.AtomicInteger;
 import com.github.theprez.jcmdutils.AppLogger;
 import com.ibm.as400.access.AS400;
 import com.ibm.as400.access.AS400JDBCDataSource;
-import com.ibm.as400.access.IFSFile;
 
 public class TriggerManager {
 
@@ -68,6 +67,7 @@ public class TriggerManager {
         executeSQLInNewStatement(createVarSql);
 
         // Create the data queue
+        // TODO is it really necessary to attempt the delete first?  the triggerId should be unique, so we should *never* encounter an existing data queue by that name
         String deleteDqCmd = String.format("QSYS/DLTDTAQ DTAQ(%s/%s) ", m_dq_library, triggerId);
         m_clCommandExecutor.executeAndIgnoreErrors(m_logger, deleteDqCmd);
         String createDqCmd = String.format(
@@ -76,13 +76,16 @@ public class TriggerManager {
         m_clCommandExecutor.execute(createDqCmd);
 
         // Now create the trigger
+        // TODO *USER does not have authority to the create trigger command
+        //      [SQL0552] Not authorized to CREATE TRIGGER.
+        //      https://www.ibm.com/docs/en/i/latest?topic=statements-create-trigger
         executeSQLInNewStatement(processedSQL);
 
         return new TriggerDescriptor(m_dq_library, triggerId, _srcSchema, _srcTable);
     }
 
     public List<TriggerDescriptor> listTriggers() throws SQLException {
-        LinkedList<TriggerDescriptor> ret = new LinkedList<TriggerDescriptor>();
+        LinkedList<TriggerDescriptor> ret = new LinkedList<>();
         try (PreparedStatement stmt = m_conn.prepareStatement(
                 "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from qsys2.systriggers where TRIGGER_SCHEMA like ?")) {
             stmt.setString(1, m_dq_library.trim().toUpperCase());
@@ -98,7 +101,6 @@ public class TriggerManager {
     }
 
     public TriggerDescriptor getExistingTriggerForTable(String _schema, String _table) throws SQLException {
-        LinkedList<TriggerDescriptor> ret = new LinkedList<TriggerDescriptor>();
         try (PreparedStatement stmt = m_conn.prepareStatement(
                 "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from qsys2.systriggers where TRIGGER_SCHEMA like ? AND EVENT_OBJECT_SCHEMA like ? AND EVENT_OBJECT_TABLE like ?")) {
             stmt.setString(1, m_dq_library.trim().toUpperCase());
@@ -159,7 +161,6 @@ public class TriggerManager {
             m_logger.printfln_warn("No trigger exists for table %s.%s", _schema, _table);
             return null;
         }
-        boolean allSuccessful = true;
 
         // drop the trigger and global variable
         try (Statement stmt = m_conn.createStatement()) {
@@ -169,7 +170,7 @@ public class TriggerManager {
                     String.format("drop variable %s.%s", existingTrigger.getLibrary(), existingTrigger.getTriggerId()));
         }
         // delete the data queue
-        m_clCommandExecutor.execute(String.format("DLTDTAQ DTAQ(%s/%s)", m_dq_library, existingTrigger.getTriggerId()));
+        m_clCommandExecutor.execute(String.format("QSYS/DLTDTAQ DTAQ(%s/%s)", m_dq_library, existingTrigger.getTriggerId()));
 
         return existingTrigger;
     }
