@@ -9,6 +9,7 @@ import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.LinkedList;
 import java.util.List;
+import java.util.Objects;
 import java.util.Properties;
 import java.util.UUID;
 import java.util.concurrent.atomic.AtomicInteger;
@@ -41,7 +42,7 @@ public class TriggerManager {
     public synchronized TriggerDescriptor createTrigger(String _srcSchema, String _srcTable)
             throws IOException, SQLException {
         TriggerDescriptor existingTrigger = getExistingTriggerForTable(_srcSchema, _srcTable);
-        if (null != existingTrigger) {
+        if (Objects.nonNull(existingTrigger)) {
             throw new IOException("Trigger already exists: " + existingTrigger);
         }
         SqlTemplateProcessor sql = new SqlTemplateProcessor();
@@ -87,7 +88,7 @@ public class TriggerManager {
     public List<TriggerDescriptor> listTriggers() throws SQLException {
         LinkedList<TriggerDescriptor> ret = new LinkedList<>();
         try (PreparedStatement stmt = m_conn.prepareStatement(
-                "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from qsys2.systriggers where TRIGGER_SCHEMA like ?")) {
+                "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from qsys2.systriggers where TRIGGER_SCHEMA = ?")) {
             stmt.setString(1, m_dq_library.trim().toUpperCase());
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
@@ -102,19 +103,19 @@ public class TriggerManager {
 
     public TriggerDescriptor getExistingTriggerForTable(String _schema, String _table) throws SQLException {
         try (PreparedStatement stmt = m_conn.prepareStatement(
-                "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from qsys2.systriggers where TRIGGER_SCHEMA like ? AND EVENT_OBJECT_SCHEMA like ? AND EVENT_OBJECT_TABLE like ?")) {
+                "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from qsys2.systriggers where TRIGGER_SCHEMA = ? AND EVENT_OBJECT_SCHEMA like ? AND EVENT_OBJECT_TABLE like ?")) {
             stmt.setString(1, m_dq_library.trim().toUpperCase());
 // TODO the schema and table name could be delimited, so the query values need to be set accordingly
             stmt.setString(2, _schema);
             stmt.setString(3, _table);
             ResultSet rs = stmt.executeQuery();
-            if (!rs.next()) {
-                return null;
-            }
+            if (rs.next()) {
             String triggerId = rs.getString(1);
             String sourceSchema = rs.getString(2);
             String sourceTable = rs.getString(3);
             return new TriggerDescriptor(m_dq_library, triggerId, sourceSchema, sourceTable);
+            }
+            return null;
         }
     }
 
@@ -147,8 +148,8 @@ public class TriggerManager {
     }
 
     private boolean doesTriggerExistWithId(String _triggerId) throws SQLException {
-        try (PreparedStatement stmt = m_conn.prepareStatement(String.format(
-                "select count(TRIGGER_NAME) from qsys2.systriggers where TRIGGER_SCHEMA like ? and TRIGGER_NAME like ?"))) {
+        try (PreparedStatement stmt = m_conn.prepareStatement(
+                "select count(TRIGGER_NAME) from qsys2.systriggers where TRIGGER_SCHEMA = ? and TRIGGER_NAME like ?")) {
             stmt.setString(1, m_dq_library);
             stmt.setString(2, _triggerId);
             ResultSet rs = stmt.executeQuery();
@@ -159,7 +160,7 @@ public class TriggerManager {
 
     public TriggerDescriptor deleteTriggerFromTable(final String _schema, final String _table) throws SQLException {
         TriggerDescriptor existingTrigger = getExistingTriggerForTable(_schema, _table);
-        if (null == existingTrigger) {
+        if (Objects.isNull(existingTrigger)) {
             m_logger.printfln_warn("No trigger exists for table %s.%s", _schema, _table);
             return null;
         }
