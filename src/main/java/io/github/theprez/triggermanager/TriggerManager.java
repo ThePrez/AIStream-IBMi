@@ -12,30 +12,23 @@ import java.util.List;
 import java.util.Objects;
 import java.util.Properties;
 import java.util.UUID;
-import java.util.concurrent.atomic.AtomicInteger;
 
 import com.github.theprez.jcmdutils.AppLogger;
 import com.ibm.as400.access.AS400;
 import com.ibm.as400.access.AS400JDBCDataSource;
 
 public class TriggerManager {
+    private static final String GENERATED_NAME_PREFIX = "AI";
 
-    private AS400 m_as400;
-    private String m_dq_library;
-    private String m_varLocation;
-    private AS400JDBCDataSource m_ds;
-    private Connection m_conn;
-    private AppLogger m_logger;
+    private final String m_dq_library;
+    private final Connection m_conn;
+    private final AppLogger m_logger;
     private final QCmdExc m_clCommandExecutor;
-    private AtomicInteger m_triggerIdCtr = new AtomicInteger(1);
 
     public TriggerManager(final AppLogger _logger, final AS400 _as400, final String _dq_library) throws SQLException {
-        m_as400 = _as400;
         m_logger = _logger;
-        m_dq_library = _dq_library;
-        m_varLocation = String.format("%s.dq_json", _dq_library.trim().toUpperCase());
-        m_ds = new AS400JDBCDataSource(_as400);
-        m_conn = m_ds.getConnection();
+        m_dq_library = _dq_library.toUpperCase().trim();
+        m_conn = new AS400JDBCDataSource(_as400).getConnection();
         m_clCommandExecutor = new QCmdExc(m_logger, m_conn);
     }
 
@@ -48,7 +41,7 @@ public class TriggerManager {
         SqlTemplateProcessor sql = new SqlTemplateProcessor();
         String triggerId = getUniqueTriggerName().trim();
         Properties p = new Properties();
-        p.setProperty("LIBRARY", m_dq_library.toUpperCase().trim());
+        p.setProperty("LIBRARY", m_dq_library);
         p.setProperty("TRIGGER_NAME", triggerId);
         p.setProperty("SOURCE_SCHEMA", _srcSchema);
 
@@ -77,7 +70,7 @@ public class TriggerManager {
         } catch (SQLException e) {
             // Failed to set the label, oh well
         }
-
+        
         // Create the data queue
         // TODO is it really necessary to attempt the delete first?  the triggerId should be unique, so we should *never* encounter an existing data queue by that name
         String deleteDqCmd = String.format("QSYS/DLTDTAQ DTAQ(%s/%s) ", m_dq_library, triggerId);
@@ -111,7 +104,7 @@ public class TriggerManager {
         LinkedList<TriggerDescriptor> ret = new LinkedList<>();
         try (PreparedStatement stmt = m_conn.prepareStatement(
                 "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from qsys2.systriggers where TRIGGER_SCHEMA = ?")) {
-            stmt.setString(1, m_dq_library.trim().toUpperCase());
+            stmt.setString(1, m_dq_library);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
                 String triggerId = rs.getString(1);
@@ -126,16 +119,16 @@ public class TriggerManager {
     public TriggerDescriptor getExistingTriggerForTable(String _schema, String _table) throws SQLException {
         try (PreparedStatement stmt = m_conn.prepareStatement(
                 "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from qsys2.systriggers where TRIGGER_SCHEMA = ? AND EVENT_OBJECT_SCHEMA like ? AND EVENT_OBJECT_TABLE like ?")) {
-            stmt.setString(1, m_dq_library.trim().toUpperCase());
-// TODO the schema and table name could be delimited, so the query values need to be set accordingly
+            stmt.setString(1, m_dq_library);
+            // TODO the schema and table name could be delimited, so the query values need to be set accordingly
             stmt.setString(2, _schema);
             stmt.setString(3, _table);
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
-            String triggerId = rs.getString(1);
-            String sourceSchema = rs.getString(2);
-            String sourceTable = rs.getString(3);
-            return new TriggerDescriptor(m_dq_library, triggerId, sourceSchema, sourceTable);
+                String triggerId = rs.getString(1);
+                String sourceSchema = rs.getString(2);
+                String sourceTable = rs.getString(3);
+                return new TriggerDescriptor(m_dq_library, triggerId, sourceSchema, sourceTable);
             }
             return null;
         }
@@ -201,7 +194,7 @@ public class TriggerManager {
 
     private synchronized String getUniqueTriggerName() throws SQLException {
         while (true) {
-            String tryMe = "J" + UUID.randomUUID().toString().replaceAll("[^A-Z0-9]+", "").substring(0, 9);
+            String tryMe = (GENERATED_NAME_PREFIX + UUID.randomUUID().toString().replaceAll("[^A-Z0-9]+", "")).substring(0, 10);
             if (!doesTriggerExistWithId(tryMe)) {
                 return tryMe;
             }
