@@ -20,7 +20,6 @@ public class SelfInstaller {
     public void install() throws IOException, SQLException {
         createLibraryIfNeeded();
     }
-
     private void createLibraryIfNeeded() throws IOException, SQLException {
         IFSFile checker = new IFSFile(m_as400, "/qsys.lib/" + m_library + ".lib");
         if(checker.exists()) {
@@ -29,6 +28,11 @@ public class SelfInstaller {
         }
         QCmdExc clCmdExc = new QCmdExc(m_logger, m_as400);
         clCmdExc.execute("QSYS/CRTLIB " + m_library);
+        // TODO Set appropriate authorities
+        try {
+            clCmdExc.execute("QSYS/CHGLIB LIB(" + m_library + ") TEXT('AI Stream Monitoring')");
+        } catch (SQLException ex) {
+            // Failed to set the text, oh well
+        }
     }
-
 }
