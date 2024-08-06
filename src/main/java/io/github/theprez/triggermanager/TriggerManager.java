@@ -66,13 +66,24 @@ public class TriggerManager {
         String createVarSql = String.format("create or replace variable %s.%s clob(64000) ccsid 1208", m_dq_library,
                 triggerId); // TODO: remediate SQL injection
         executeSQLInNewStatement(createVarSql);
+        // Set the global variable label
+        try {
+            executeSQLInNewStatement(String.format(
+                "LABEL ON VARIABLE %s.%s IS 'AI Stream Monitoring - %s.%s'",
+                    m_dq_library,
+                    triggerId,
+                    _srcSchema,
+                    _srcTable)); // TODO: remediate SQL injection
+        } catch (SQLException e) {
+            // Failed to set the label, oh well
+        }
 
         // Create the data queue
         // TODO is it really necessary to attempt the delete first?  the triggerId should be unique, so we should *never* encounter an existing data queue by that name
         String deleteDqCmd = String.format("QSYS/DLTDTAQ DTAQ(%s/%s) ", m_dq_library, triggerId);
         m_clCommandExecutor.executeAndIgnoreErrors(m_logger, deleteDqCmd);
         String createDqCmd = String.format(
-                "QSYS/CRTDTAQ DTAQ(%s/%s) MAXLEN(64512) SENDERID(*YES) SIZE(*MAX2GB) AUTORCL(*YES) ", m_dq_library,
+                "QSYS/CRTDTAQ DTAQ(%s/%s) MAXLEN(64512) SENDERID(*YES) SIZE(*MAX2GB) AUTORCL(*YES) TEXT('AI Stream Monitoring')", m_dq_library,
                 triggerId);
         m_clCommandExecutor.execute(createDqCmd);
 
@@ -81,6 +92,17 @@ public class TriggerManager {
         //      [SQL0552] Not authorized to CREATE TRIGGER.
         //      https://www.ibm.com/docs/en/i/latest?topic=statements-create-trigger
         executeSQLInNewStatement(processedSQL);
+        // Set the trigger label
+        try {
+            executeSQLInNewStatement(String.format(
+                "LABEL ON TRIGGER %s.%s IS 'AI Stream Monitoring - %s.%s'",
+                    m_dq_library,
+                    triggerId,
+                    _srcSchema,
+                    _srcTable)); // TODO: remediate SQL injection
+        } catch (SQLException e) {
+            // Failed to set the label, oh well
+        }
 
         return new TriggerDescriptor(m_dq_library, triggerId, _srcSchema, _srcTable);
     }
@@ -130,8 +152,7 @@ public class TriggerManager {
         boolean isFirst = true;
         // TODO Why not just query SYSCOLUMNS for the details?
         try (PreparedStatement stmt = m_conn
-                .prepareStatement(String.format("select * from %s.%s limit 1", _srcLib, _srcTable))) { // TODO: mitigate
-                                                                                                       // SQL injection
+                .prepareStatement(String.format("select * from %s.%s limit 1", _srcLib, _srcTable))) { // TODO: mitigate SQL injection
             ResultSetMetaData metaData = stmt.getMetaData();
             int columnCount = metaData.getColumnCount();
             for (int i = 1; i <= columnCount; ++i) {
