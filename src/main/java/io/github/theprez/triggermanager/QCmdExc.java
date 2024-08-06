@@ -31,7 +31,7 @@ public class QCmdExc {
     public void executeAndIgnoreErrors(final AppLogger _logger, final String _cmd) {
         try {
             execute(_cmd);
-        } catch (final Exception e) {
+        } catch (final SQLException e) {
             _logger.printfln_verbose(e.getLocalizedMessage());
         }
     }
