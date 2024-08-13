@@ -11,6 +11,7 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.StringJoiner;
 import java.util.UUID;
 
 import com.github.theprez.jcmdutils.AppLogger;
@@ -141,24 +142,18 @@ public class TriggerManager {
     }
 
     private String getColumnData(String _srcLib, String _srcTable) throws SQLException {
-        String ret = "";
-        boolean isFirst = true;
-        // TODO Why not just query SYSCOLUMNS for the details?
+        final StringJoiner sjColumnData = new StringJoiner(",\n");
+        // TODO Why not just query SYSCOLUMNS for the details?  Note that SELECT * will not include any hidden columns
         try (PreparedStatement stmt = m_conn
                 .prepareStatement(String.format("select * from %s.%s limit 1", _srcLib, _srcTable))) { // TODO: mitigate SQL injection
             ResultSetMetaData metaData = stmt.getMetaData();
             int columnCount = metaData.getColumnCount();
             for (int i = 1; i <= columnCount; ++i) {
                 String columnName = metaData.getColumnName(i);
-                if (!isFirst) {
-                    ret += ",\n";
-                }
-                ret += String.format("            KEY '%s' VALUE n.%s", columnName, columnName);
-                isFirst = false;
+                sjColumnData.add(String.format("            KEY '%s' VALUE n.%s", columnName, columnName));
             }
         }
-
-        return ret;
+        return sjColumnData.toString();
     }
 
     private boolean doesTriggerExistWithId(String _triggerId) throws SQLException {
