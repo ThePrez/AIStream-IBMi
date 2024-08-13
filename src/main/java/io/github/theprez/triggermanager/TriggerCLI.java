@@ -107,13 +107,13 @@ public class TriggerCLI {
                     }
                     break;
                 default:
-                    logger.println("Listing triggers....");
+                    logger.println("Listing triggers...");
                     List<TriggerDescriptor> triggerList = tMan.listTriggers();
                     if(triggerList.isEmpty()) {
                         logger.println_warn("No triggers installed");
                     }
                     for (TriggerDescriptor l : triggerList) {
-                        System.out.println("       " + l);
+                        logger.println("       " + l);
                     }
             }
 
@@ -128,7 +128,7 @@ public class TriggerCLI {
             // logger.println();
             // logger.println("Listing triggers....");
             // for (TriggerDescriptor l : tMan.listTriggers()) {
-            // System.out.println(" " + l);
+            // logger.println(" " + l);
             // }
             // tMan.deleteTriggerFromTable("qiws", "qcustcdt");
         } catch (Exception e) {
