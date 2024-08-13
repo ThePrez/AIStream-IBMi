@@ -39,7 +39,6 @@ public class TriggerManager {
         if (Objects.nonNull(existingTrigger)) {
             throw new IOException("Trigger already exists: " + existingTrigger);
         }
-        SqlTemplateProcessor sql = new SqlTemplateProcessor();
         String triggerId = getUniqueTriggerName().trim();
         Properties p = new Properties();
         p.setProperty("LIBRARY", m_dq_library);
@@ -52,7 +51,7 @@ public class TriggerManager {
         p.setProperty("COLUMN_DATA", columnData);
         p.setProperty("COLUMN_DATA_ON_DELETE", columnData.replace(" n.", " o."));
         p.setProperty("DATA_QUEUE_NAME", triggerId);
-        String processedSQL = sql.getProcessed("create.sql", p);
+        String processedSQL = SqlTemplateProcessor.getProcessed("create.sql", p);
         m_logger.printfln_verbose("Full SQL statement is:\n%s\n=================================================",
                 processedSQL);
 
