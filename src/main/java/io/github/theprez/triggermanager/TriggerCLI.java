@@ -26,7 +26,7 @@ public class TriggerCLI {
 
     public static void main(String[] _args) {
         // TODO The library where the triggers, variables, and data queues are saved needs to be configurable
-        final String LIBRARY = "triggerman";
+        final String LIBRARY = "TRIGGERMAN";
 
         LinkedList<String> argsList = new LinkedList<>(Arrays.asList(_args));
         AppLogger logger = AppLogger.getSingleton(argsList.remove("-v") );
@@ -47,10 +47,10 @@ public class TriggerCLI {
                         action = CLIActions.valueOf(argsList.removeFirst().trim().toUpperCase());
                         break;
                     case "--schema":
-                        schema = argsList.removeFirst();
+                        schema = normalizeName(argsList.removeFirst());
                         break;
                     case "--table":
-                        table = argsList.removeFirst();
+                        table = normalizeName(argsList.removeFirst());
                         break;
                     default:
                         logger.printfln_err("Unrecognized argument: '%s'", currentArg);
@@ -63,7 +63,6 @@ public class TriggerCLI {
         }
 
         // validate inputs
-        //
         boolean isInputOk = true;
         if (Objects.isNull(action)) {
             logger.println_err("ERROR: No action specified");
@@ -78,7 +77,6 @@ public class TriggerCLI {
                 isInputOk = false;
             }
         }
-        // TODO need to normalize the schema and table names.  If not delimited, convert to uppercase.
         if (!isInputOk) {
             System.exit(19);
         }
@@ -106,10 +104,11 @@ public class TriggerCLI {
                         logger.println_success("Trigger deleted: " + deletedTrigger);
                     }
                     break;
+                case LIST:
                 default:
                     logger.println("Listing triggers...");
                     List<TriggerDescriptor> triggerList = tMan.listTriggers();
-                    if(triggerList.isEmpty()) {
+                    if (triggerList.isEmpty()) {
                         logger.println_warn("No triggers installed");
                     }
                     for (TriggerDescriptor l : triggerList) {
@@ -135,5 +134,18 @@ public class TriggerCLI {
             logger.println_err(e.getLocalizedMessage());
             logger.printExceptionStack_verbose(e);
         }
+    }
+
+    private static String normalizeName(final String name) {
+        // If null return an empty string
+        if (Objects.isNull(name)) {
+            return "";
+        }
+        // If delimited just return it
+        if (name.startsWith("\"") && name.endsWith("\"")) {
+            return name;
+        }
+        // Otherwise fold to uppercase. The user must explicitly delimit names that require it.
+        return name.toUpperCase();
     }
 }
