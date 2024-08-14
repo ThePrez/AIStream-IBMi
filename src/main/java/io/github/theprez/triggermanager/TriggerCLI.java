@@ -13,23 +13,37 @@ import com.ibm.as400.access.AS400;
 import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
 
 public class TriggerCLI {
+
     private enum CLIActions {
         /** List the tables currently being monitored */
-        LIST,
+        LIST(false),
         /** Add the table to monitoring */
-        ADD,
+        ADD(true),
         /** Get monitoring details for the table */
-        GET,
+        GET(true),
         /** Remove the table from monitoring */
-        REMOVE
+        REMOVE(true),
+        /** Start the router job */
+        DAEMONSTART(false);
+
+        public boolean m_isTableAndSchemaRequired;
+
+        CLIActions(boolean _b) {
+            m_isTableAndSchemaRequired = _b;
+        }
+
+        boolean isTableAndSchemaRequired() {
+            return m_isTableAndSchemaRequired;
+        }
     }
 
     public static void main(String[] _args) {
-        // TODO The library where the triggers, variables, and data queues are saved needs to be configurable
+        // TODO The library where the triggers, variables, and data queues are saved
+        // needs to be configurable
         final String LIBRARY = "triggerman";
 
         LinkedList<String> argsList = new LinkedList<>(Arrays.asList(_args));
-        AppLogger logger = AppLogger.getSingleton(argsList.remove("-v") );
+        AppLogger logger = AppLogger.getSingleton(argsList.remove("-v"));
 
         if (argsList.isEmpty()) {
             logger.println_err("ERROR: input arguments are required");
@@ -68,7 +82,7 @@ public class TriggerCLI {
         if (Objects.isNull(action)) {
             logger.println_err("ERROR: No action specified");
             isInputOk = false;
-        } else if (CLIActions.LIST != action) {
+        } else if (action.isTableAndSchemaRequired()) {
             if (StringUtils.isEmpty(table)) {
                 logger.println_err("ERROR: No table specified");
                 isInputOk = false;
@@ -78,7 +92,8 @@ public class TriggerCLI {
                 isInputOk = false;
             }
         }
-        // TODO need to normalize the schema and table names.  If not delimited, convert to uppercase.
+        // TODO need to normalize the schema and table names. If not delimited, convert
+        // to uppercase.
         if (!isInputOk) {
             System.exit(19);
         }
@@ -106,10 +121,14 @@ public class TriggerCLI {
                         logger.println_success("Trigger deleted: " + deletedTrigger);
                     }
                     break;
+                case DAEMONSTART:
+                    TriggerDaemon td = new TriggerDaemon(schema, tMan);
+                    td.start();
+                    break;
                 default:
                     logger.println("Listing triggers...");
                     List<TriggerDescriptor> triggerList = tMan.listTriggers();
-                    if(triggerList.isEmpty()) {
+                    if (triggerList.isEmpty()) {
                         logger.println_warn("No triggers installed");
                     }
                     for (TriggerDescriptor l : triggerList) {
@@ -132,7 +151,7 @@ public class TriggerCLI {
             // }
             // tMan.deleteTriggerFromTable("qiws", "qcustcdt");
         } catch (Exception e) {
-            logger.println_err(e.getLocalizedMessage());
+            logger.println_err("Error: "+e.getClass().getSimpleName()+ " -> "+e.getLocalizedMessage());
             logger.printExceptionStack_verbose(e);
         }
     }

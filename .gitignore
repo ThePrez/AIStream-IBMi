@@ -20,3 +20,5 @@ buildNumber.properties
 dev.env
 # VS Code launch configurations
 .vscode/launch.json
+.env
+.vscode/settings.json
