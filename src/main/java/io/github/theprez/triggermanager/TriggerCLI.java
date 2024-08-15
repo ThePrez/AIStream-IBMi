@@ -122,7 +122,7 @@ public class TriggerCLI {
                     }
                     break;
                 case DAEMONSTART:
-                    TriggerDaemon td = new TriggerDaemon(tMan);
+                    TriggerDaemon td = new TriggerDaemon(logger, tMan);
                     td.start();
                     break;
                 default:
