@@ -9,14 +9,11 @@ import com.github.theprez.jcmdutils.AppLogger;
 
 import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
 
-public class TriggerConfigurationFile {
-    public static final String KEY_TRIGGER_MANAGER_LIBRARY = "TRIGGER_MANAGER_LIBRARY";
-    public static final String KEY_KAFKA_BROKER_URI = "KAFKA_BROKER_URI";
-
-    // Default path of AIStream configuration file on IBM i host
-    private static final String DEFAULT_CONFIG_PATH = "/QOpenSys/etc/aistream/main.conf";
-    // Environment variable to override the config file path
-    private static final String ENV_AISTREAM_CONFIG_FILE = "AISTREAM_CONFIG_FILE";
+public class TriggerConfigurationFile implements ITriggerConfigurationConstants {
+    // Default value of the trigger manager library
+    private static final String DEFAULT_TRIGGER_MANAGER_LIBRARY = "triggerman";
+    // Default value of the Kafka broker uri
+    private static final String DEFAULT_KAFKA_BROKER_URI = "idevphp.idevcloud.com:9092";
 
     private static TriggerConfigurationFile fInstance;
     private Properties mProperties;
@@ -33,7 +30,7 @@ public class TriggerConfigurationFile {
         if (!configPath.isEmpty()) {
             TriggerConfigurationFile configFile = new TriggerConfigurationFile();
             try {
-                configFile.load(configPath);
+                configFile.load(configPath, _logger);
                 fInstance = configFile;
                 return fInstance;
             }
@@ -47,9 +44,24 @@ public class TriggerConfigurationFile {
         return null;
     }
 
-    private void load(String configPath) throws FileNotFoundException, IOException {
-        FileInputStream fis = new FileInputStream(configPath);
+    private void load(String _configPath, AppLogger _logger) throws FileNotFoundException, IOException {
+        FileInputStream fis = new FileInputStream(_configPath);
         mProperties.load(fis);
+        fis.close();
+
+        setDefaultValue(KEY_TRIGGER_MANAGER_LIBRARY, DEFAULT_TRIGGER_MANAGER_LIBRARY, _logger);
+        setDefaultValue(KEY_KAFKA_BROKER_URI, DEFAULT_KAFKA_BROKER_URI, _logger);
+    }
+
+    /**
+     * Set the specified key to the default value if the key does not exist in the properties list.
+     */
+    private void setDefaultValue(String _key, String _defaultValue, AppLogger _logger) {
+        if (!mProperties.containsKey(_key)) {
+            _logger.printfln_warn("Warning: Property '%s' is not specified in configuration file. Using default value '%s'",
+                _key, _defaultValue);
+            mProperties.put(_key, _defaultValue);
+        }
     }
 
     public String getTriggerManagerLibrary() {
