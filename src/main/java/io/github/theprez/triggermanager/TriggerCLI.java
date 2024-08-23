@@ -48,7 +48,7 @@ public class TriggerCLI {
 
         TriggerConfigurationFile configFile = TriggerConfigurationFile.getDefault(logger);
         if (configFile == null) {
-            logger.println_err("Error: AIStream configuration file is not found.");
+            logger.println_err("Error: AIStream configuration file is not found or its content is not valid.");
             System.exit(19);
         }
 
