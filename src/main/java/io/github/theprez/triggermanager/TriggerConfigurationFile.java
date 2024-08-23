@@ -12,14 +12,14 @@ import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
 public class TriggerConfigurationFile implements ITriggerConfigurationConstants {
     // Default value of the trigger manager library
     private static final String DEFAULT_TRIGGER_MANAGER_LIBRARY = "triggerman";
-    // Default value of the Kafka broker uri
-    private static final String DEFAULT_KAFKA_BROKER_URI = "idevphp.idevcloud.com:9092";
 
     private static TriggerConfigurationFile fInstance;
     private Properties mProperties;
+    private AppLogger mLogger;
  
-    private TriggerConfigurationFile() {
+    private TriggerConfigurationFile(AppLogger _logger) {
         mProperties = new Properties();
+        mLogger = _logger;
     }
 
     public static TriggerConfigurationFile getDefault(AppLogger _logger) {
@@ -28,11 +28,15 @@ public class TriggerConfigurationFile implements ITriggerConfigurationConstants 
         String configPath = IBMiDotEnv.getDotEnv().get(ENV_AISTREAM_CONFIG_FILE, 
             IBMiDotEnv.isIBMi() ? DEFAULT_CONFIG_PATH : "");
         if (!configPath.isEmpty()) {
-            TriggerConfigurationFile configFile = new TriggerConfigurationFile();
+            TriggerConfigurationFile configFile = new TriggerConfigurationFile(_logger);
             try {
-                configFile.load(configPath, _logger);
-                fInstance = configFile;
-                return fInstance;
+                configFile.load(configPath);
+                if (configFile.validate()) {
+                    fInstance = configFile;
+                    return fInstance;
+                }
+                else
+                    return null;
             }
             catch (Exception ex) {
                 _logger.printfln_err("Exception thrown: %s->%s", ex.getClass().getSimpleName(), ex.getLocalizedMessage());
@@ -44,24 +48,27 @@ public class TriggerConfigurationFile implements ITriggerConfigurationConstants 
         return null;
     }
 
-    private void load(String _configPath, AppLogger _logger) throws FileNotFoundException, IOException {
+    private void load(String _configPath) throws FileNotFoundException, IOException {
         FileInputStream fis = new FileInputStream(_configPath);
         mProperties.load(fis);
         fis.close();
-
-        setDefaultValue(KEY_TRIGGER_MANAGER_LIBRARY, DEFAULT_TRIGGER_MANAGER_LIBRARY, _logger);
-        setDefaultValue(KEY_KAFKA_BROKER_URI, DEFAULT_KAFKA_BROKER_URI, _logger);
     }
 
     /**
-     * Set the specified key to the default value if the key does not exist in the properties list.
+     * Validate the configuration file. Return true if the contents are valid.
      */
-    private void setDefaultValue(String _key, String _defaultValue, AppLogger _logger) {
-        if (!mProperties.containsKey(_key)) {
-            _logger.printfln_warn("Warning: Property '%s' is not specified in configuration file. Using default value '%s'",
-                _key, _defaultValue);
-            mProperties.put(_key, _defaultValue);
+    private boolean validate() {
+        if (!mProperties.containsKey(KEY_KAFKA_BROKER_URI)) {
+            mLogger.printfln_err("Property is not set in configuration file: %s", KEY_KAFKA_BROKER_URI);
+            return false;
         }
+
+        if (!mProperties.containsKey(KEY_TRIGGER_MANAGER_LIBRARY)) {
+            mLogger.printfln_warn("Warning: Property '%s' is not set in configuration file. Using default value '%s'.",
+                KEY_TRIGGER_MANAGER_LIBRARY, DEFAULT_TRIGGER_MANAGER_LIBRARY);
+            mProperties.put(KEY_TRIGGER_MANAGER_LIBRARY, DEFAULT_TRIGGER_MANAGER_LIBRARY);
+        }
+        return true;
     }
 
     public String getTriggerManagerLibrary() {
