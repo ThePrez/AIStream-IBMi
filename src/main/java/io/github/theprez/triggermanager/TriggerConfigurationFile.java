@@ -8,6 +8,7 @@ import java.util.Properties;
 import com.github.theprez.jcmdutils.AppLogger;
 
 import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
+import io.github.theprez.triggermanager.TriggerCLI.CLIActions;
 
 public class TriggerConfigurationFile implements ITriggerConfigurationConstants {
     // Default value of the trigger manager library
@@ -31,13 +32,9 @@ public class TriggerConfigurationFile implements ITriggerConfigurationConstants 
             TriggerConfigurationFile configFile = new TriggerConfigurationFile(_logger);
             try {
                 configFile.load(configPath);
-                if (configFile.validate()) {
-                    fInstance = configFile;
-                    return fInstance;
-                }
-                else
-                    return null;
-            }
+                fInstance = configFile;
+                return fInstance;
+           }
             catch (Exception ex) {
                 _logger.printfln_err("Exception thrown: %s->%s", ex.getClass().getSimpleName(), ex.getLocalizedMessage());
             }
@@ -57,10 +54,17 @@ public class TriggerConfigurationFile implements ITriggerConfigurationConstants 
     /**
      * Validate the configuration file. Return true if the contents are valid.
      */
-    private boolean validate() {
+    public boolean validate(CLIActions action) {
+        // Validate the KAFKA_BROKER_URI. It is only required for the daemon action.
         if (!mProperties.containsKey(KEY_KAFKA_BROKER_URI)) {
-            mLogger.printfln_err("Property is not set in configuration file: %s", KEY_KAFKA_BROKER_URI);
-            return false;
+            if (action == CLIActions.DAEMONSTART) {
+                mLogger.printfln_err("Error: Property is not set in configuration file: %s", KEY_KAFKA_BROKER_URI);
+                return false;
+            }
+            else {
+                mLogger.printfln_warn("Warning: Property is not set in configuration file: %s", KEY_KAFKA_BROKER_URI);
+                return true;
+            }
         }
 
         if (!mProperties.containsKey(KEY_TRIGGER_MANAGER_LIBRARY)) {
