@@ -14,7 +14,7 @@ import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
 
 public class TriggerCLI {
 
-    private enum CLIActions {
+    enum CLIActions {
         /** List the tables currently being monitored */
         LIST(false),
         /** Add the table to monitoring */
@@ -45,15 +45,6 @@ public class TriggerCLI {
             logger.println_err("ERROR: input arguments are required");
             System.exit(17);
         }
-
-        TriggerConfigurationFile configFile = TriggerConfigurationFile.getDefault(logger);
-        if (configFile == null) {
-            logger.println_err("Error: AIStream configuration file is not found or its content is not valid.");
-            System.exit(19);
-        }
-
-        // The library where the triggers, variables, and data queues are saved
-        final String triggermanLibrary = configFile.getTriggerManagerLibrary();
 
         CLIActions action = null;
         String schema = null;
@@ -102,6 +93,20 @@ public class TriggerCLI {
         if (!isInputOk) {
             System.exit(19);
         }
+
+        TriggerConfigurationFile configFile = TriggerConfigurationFile.getDefault(logger);
+        if (configFile == null) {
+            logger.println_err("Error: AIStream configuration file is not found.");
+            System.exit(19);
+        }
+        else if (!configFile.validate(action)) {
+            logger.println_err("Error: Invalid content in AIStream configuration file.");
+            System.exit(19);
+        }
+
+        // The library where the triggers, variables, and data queues are saved
+        final String triggermanLibrary = configFile.getTriggerManagerLibrary();
+
         try (AS400 as400 = IBMiDotEnv.getCachedSystemConnection(true)) {
             SelfInstaller installer = new SelfInstaller(logger, as400, triggermanLibrary);
             installer.install();
