@@ -35,7 +35,7 @@ public class TriggerCLI {
         boolean isTableAndSchemaRequired() {
             return m_isTableAndSchemaRequired;
         }
-        boolean isKafkaRequired() {
+        boolean isKafkaBrokerRequired() {
             return m_isKafkaBrokerRequired;
         }
     }

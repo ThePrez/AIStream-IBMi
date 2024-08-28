@@ -57,7 +57,7 @@ public class TriggerConfigurationFile implements ITriggerConfigurationConstants 
     public boolean validate(CLIActions action) {
         // Validate the KAFKA_BROKER_URI. It is only required for the daemon action.
         if (!mProperties.containsKey(KEY_KAFKA_BROKER_URI)) {
-            if (action.isKafkaRequired()) {
+            if (action.isKafkaBrokerRequired()) {
                 mLogger.printfln_err("Error: Property is not set in configuration file: %s", KEY_KAFKA_BROKER_URI);
                 return false;
             }
