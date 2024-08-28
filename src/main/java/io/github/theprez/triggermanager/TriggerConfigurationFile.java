@@ -61,10 +61,8 @@ public class TriggerConfigurationFile implements ITriggerConfigurationConstants 
                 mLogger.printfln_err("Error: Property is not set in configuration file: %s", KEY_KAFKA_BROKER_URI);
                 return false;
             }
-            else {
-                mLogger.printfln_warn("Warning: Property is not set in configuration file: %s", KEY_KAFKA_BROKER_URI);
-                return true;
-            }
+            // Log as a warning and continue validation
+            mLogger.printfln_warn("Warning: Property is not set in configuration file: %s", KEY_KAFKA_BROKER_URI);
         }
 
         if (!mProperties.containsKey(KEY_TRIGGER_MANAGER_LIBRARY)) {
