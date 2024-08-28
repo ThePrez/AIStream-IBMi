@@ -16,24 +16,27 @@ public class TriggerCLI {
 
     enum CLIActions {
         /** List the tables currently being monitored */
-        LIST(false),
+        LIST(false, false),
         /** Add the table to monitoring */
-        ADD(true),
+        ADD(true, false),
         /** Get monitoring details for the table */
-        GET(true),
+        GET(true, false),
         /** Remove the table from monitoring */
-        REMOVE(true),
+        REMOVE(true, false),
         /** Start the router job */
-        DAEMONSTART(false);
+        DAEMONSTART(false, true);
 
-        public boolean m_isTableAndSchemaRequired;
-
-        CLIActions(boolean _b) {
-            m_isTableAndSchemaRequired = _b;
+        private final boolean m_isTableAndSchemaRequired;
+        private final boolean m_isKafkaBrokerRequired;
+        CLIActions(boolean bTableAndSchema, boolean bKafkaBroker) {
+            m_isTableAndSchemaRequired = bTableAndSchema;
+            m_isKafkaBrokerRequired = bKafkaBroker;
         }
-
         boolean isTableAndSchemaRequired() {
             return m_isTableAndSchemaRequired;
+        }
+        boolean isKafkaRequired() {
+            return m_isKafkaBrokerRequired;
         }
     }
 
