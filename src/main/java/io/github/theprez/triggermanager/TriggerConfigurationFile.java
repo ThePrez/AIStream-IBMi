@@ -1,8 +1,8 @@
 package io.github.theprez.triggermanager;
 
 import java.io.FileInputStream;
-import java.io.FileNotFoundException;
 import java.io.IOException;
+import java.util.Objects;
 import java.util.Properties;
 
 import com.github.theprez.jcmdutils.AppLogger;
@@ -15,46 +15,44 @@ public class TriggerConfigurationFile implements ITriggerConfigurationConstants 
     private static final String DEFAULT_TRIGGER_MANAGER_LIBRARY = "triggerman";
 
     private static TriggerConfigurationFile fInstance;
-    private Properties mProperties;
-    private AppLogger mLogger;
- 
+    private final Properties mProperties;
+    private final AppLogger mLogger;
+
     private TriggerConfigurationFile(AppLogger _logger) {
         mProperties = new Properties();
         mLogger = _logger;
     }
 
     public static TriggerConfigurationFile getDefault(AppLogger _logger) {
-        if (fInstance != null) return fInstance;
-
-        String configPath = IBMiDotEnv.getDotEnv().get(ENV_AISTREAM_CONFIG_FILE, 
-            IBMiDotEnv.isIBMi() ? DEFAULT_CONFIG_PATH : "");
-        if (!configPath.isEmpty()) {
-            TriggerConfigurationFile configFile = new TriggerConfigurationFile(_logger);
-            try {
-                configFile.load(configPath);
-                fInstance = configFile;
-                return fInstance;
-           }
-            catch (Exception ex) {
-                _logger.printfln_err("Exception thrown: %s->%s", ex.getClass().getSimpleName(), ex.getLocalizedMessage());
+        if (Objects.isNull(fInstance)) {
+            String configPath = IBMiDotEnv.getDotEnv().get(ENV_AISTREAM_CONFIG_FILE,
+                    IBMiDotEnv.isIBMi() ? DEFAULT_CONFIG_PATH : "");
+            if (!configPath.isEmpty()) {
+                TriggerConfigurationFile configFile = new TriggerConfigurationFile(_logger);
+                try {
+                    configFile.load(configPath);
+                    fInstance = configFile;
+                } catch (IOException ex) {
+                    _logger.printfln_err("Exception thrown: %s->%s", ex.getClass().getSimpleName(),
+                            ex.getLocalizedMessage());
+                }
+            } else {
+                _logger.println("Environment variable is not set: " + ENV_AISTREAM_CONFIG_FILE);
             }
         }
-        else {
-            _logger.println("Environment variable is not set: " + ENV_AISTREAM_CONFIG_FILE);
-        }
-        return null;
+        return fInstance;
     }
 
-    private void load(String _configPath) throws FileNotFoundException, IOException {
-        FileInputStream fis = new FileInputStream(_configPath);
-        mProperties.load(fis);
-        fis.close();
+    private void load(String _configPath) throws IOException {
+        try (FileInputStream fis = new FileInputStream(_configPath)) {
+            mProperties.load(fis);
+        }
     }
 
     /**
      * Validate the configuration file. Return true if the contents are valid.
      */
-    public boolean validate(CLIActions action) {
+    boolean validate(CLIActions action) {
         // Validate the KAFKA_BROKER_URI. It is only required for the daemon action.
         if (!mProperties.containsKey(KEY_KAFKA_BROKER_URI)) {
             if (action.isKafkaBrokerRequired()) {
@@ -67,7 +65,7 @@ public class TriggerConfigurationFile implements ITriggerConfigurationConstants 
 
         if (!mProperties.containsKey(KEY_TRIGGER_MANAGER_LIBRARY)) {
             mLogger.printfln_warn("Warning: Property '%s' is not set in configuration file. Using default value '%s'.",
-                KEY_TRIGGER_MANAGER_LIBRARY, DEFAULT_TRIGGER_MANAGER_LIBRARY);
+                    KEY_TRIGGER_MANAGER_LIBRARY, DEFAULT_TRIGGER_MANAGER_LIBRARY);
             mProperties.put(KEY_TRIGGER_MANAGER_LIBRARY, DEFAULT_TRIGGER_MANAGER_LIBRARY);
         }
         return true;
