@@ -1,0 +1,64 @@
+package io.github.theprez.triggermanager;
+
+import java.util.List;
+
+import org.apache.camel.CamelContext;
+import org.apache.camel.builder.RouteBuilder;
+import org.apache.camel.impl.DefaultCamelContext;
+
+import com.github.theprez.jcmdutils.AppLogger;
+
+import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
+
+public class TriggerDaemon {
+
+    private final TriggerManager m_triggerManager;
+    private final AppLogger m_logger;
+
+    public TriggerDaemon(final AppLogger _logger, final TriggerManager _tMan) {
+        m_logger = _logger;
+        m_triggerManager = _tMan;
+
+    }
+
+    public void start() throws Exception {
+
+        // Standard for a Camel deployment. Start by getting a CamelContext object.
+        try (final CamelContext context = new DefaultCamelContext()) {
+            m_logger.println("Apache Camel version " + context.getVersion());
+
+            final List<TriggerDescriptor> triggers = m_triggerManager.listTriggers();
+            for (final TriggerDescriptor trigger : triggers) {
+
+                final String kafkaUri = String.format("kafka:%s?brokers=%s", trigger.getTriggerId(),
+                    TriggerConfigurationFile.getDefault(m_logger).getKafkaBrokerUri()); 
+                final String password = IBMiDotEnv.getDotEnv().get("IBMI_PASSWORD", "*CURRENT");
+                final String username = IBMiDotEnv.getDotEnv().get("IBMI_USERNAME", "*CURRENT");
+                final String hostname = IBMiDotEnv.getDotEnv().get("IBMI_HOSTNAME", "localhost");
+                final String dtaqUri = String.format(
+                        "jt400://%s:%s@%s/qsys.lib/%s.lib/%s.dtaq?keyed=false&format=binary&guiAvailable=false",
+                        username, password, hostname, trigger.getLibrary(), trigger.getTriggerId());
+
+                context.addRoutes(new RouteBuilder() {
+                    @Override
+                    public void configure() {
+                        from(dtaqUri)
+                                // We do this to convert the bytes from the data queue (UTF-8 JSON data) into a
+                                // String object in the message
+                                .convertBodyTo(String.class, "UTF-8")
+                                .to(kafkaUri);
+                    }
+                });
+            }
+
+            // This actually "starts" the route, so Camel will start monitoring and routing
+            // activity here.
+            context.start();
+
+            // Since this program is designed to just run forever (until user cancel), we can just sleep the
+            // main thread. Camel's work will happen in secondary threads.
+            Thread.sleep(Long.MAX_VALUE);
+            context.stop();
+        }
+    }
+}

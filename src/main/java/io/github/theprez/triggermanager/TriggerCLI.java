@@ -13,23 +13,36 @@ import com.ibm.as400.access.AS400;
 import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
 
 public class TriggerCLI {
-    private enum CLIActions {
+
+    enum CLIActions {
         /** List the tables currently being monitored */
-        LIST,
+        LIST(false, false),
         /** Add the table to monitoring */
-        ADD,
+        ADD(true, false),
         /** Get monitoring details for the table */
-        GET,
+        GET(true, false),
         /** Remove the table from monitoring */
-        REMOVE
+        REMOVE(true, false),
+        /** Start the router job */
+        DAEMONSTART(false, true);
+
+        private final boolean m_isTableAndSchemaRequired;
+        private final boolean m_isKafkaBrokerRequired;
+        CLIActions(boolean bTableAndSchema, boolean bKafkaBroker) {
+            m_isTableAndSchemaRequired = bTableAndSchema;
+            m_isKafkaBrokerRequired = bKafkaBroker;
+        }
+        boolean isTableAndSchemaRequired() {
+            return m_isTableAndSchemaRequired;
+        }
+        boolean isKafkaBrokerRequired() {
+            return m_isKafkaBrokerRequired;
+        }
     }
 
     public static void main(String[] _args) {
-        // TODO The library where the triggers, variables, and data queues are saved needs to be configurable
-        final String LIBRARY = "TRIGGERMAN";
-
         LinkedList<String> argsList = new LinkedList<>(Arrays.asList(_args));
-        AppLogger logger = AppLogger.getSingleton(argsList.remove("-v") );
+        AppLogger logger = AppLogger.getSingleton(argsList.remove("-v"));
 
         if (argsList.isEmpty()) {
             logger.println_err("ERROR: input arguments are required");
@@ -67,7 +80,7 @@ public class TriggerCLI {
         if (Objects.isNull(action)) {
             logger.println_err("ERROR: No action specified");
             isInputOk = false;
-        } else if (CLIActions.LIST != action) {
+        } else if (action.isTableAndSchemaRequired()) {
             if (StringUtils.isEmpty(table)) {
                 logger.println_err("ERROR: No table specified");
                 isInputOk = false;
@@ -77,13 +90,28 @@ public class TriggerCLI {
                 isInputOk = false;
             }
         }
+        // TODO need to normalize the schema and table names. If not delimited, convert to uppercase.
         if (!isInputOk) {
             System.exit(19);
         }
+
+        TriggerConfigurationFile configFile = TriggerConfigurationFile.getDefault(logger);
+        if (configFile == null) {
+            logger.println_err("Error: AIStream configuration file is not found.");
+            System.exit(19);
+        }
+        else if (!configFile.validate(action)) {
+            logger.println_err("Error: Invalid content in AIStream configuration file.");
+            System.exit(19);
+        }
+
+        // The library where the triggers, variables, and data queues are saved
+        final String triggermanLibrary = configFile.getTriggerManagerLibrary();
+
         try (AS400 as400 = IBMiDotEnv.getCachedSystemConnection(true)) {
-            SelfInstaller installer = new SelfInstaller(logger, as400, LIBRARY);
+            SelfInstaller installer = new SelfInstaller(logger, as400, triggermanLibrary);
             installer.install();
-            TriggerManager tMan = new TriggerManager(logger, as400, LIBRARY);
+            TriggerManager tMan = new TriggerManager(logger, as400, triggermanLibrary);
             // tMan.createTrigger("JES", "simple");
             switch (action) {
                 case ADD:
@@ -103,6 +131,10 @@ public class TriggerCLI {
                     if (null != deletedTrigger) {
                         logger.println_success("Trigger deleted: " + deletedTrigger);
                     }
+                    break;
+                case DAEMONSTART:
+                    TriggerDaemon td = new TriggerDaemon(logger, tMan);
+                    td.start();
                     break;
                 case LIST:
                 default:
@@ -131,7 +163,7 @@ public class TriggerCLI {
             // }
             // tMan.deleteTriggerFromTable("qiws", "qcustcdt");
         } catch (Exception e) {
-            logger.println_err(e.getLocalizedMessage());
+            logger.println_err("Error: "+e.getClass().getSimpleName()+ " -> "+e.getLocalizedMessage());
             logger.printExceptionStack_verbose(e);
         }
     }
