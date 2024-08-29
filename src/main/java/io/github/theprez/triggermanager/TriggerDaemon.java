@@ -28,6 +28,13 @@ public class TriggerDaemon {
             m_logger.println("Apache Camel version " + context.getVersion());
 
             final List<TriggerDescriptor> triggers = m_triggerManager.listTriggers();
+            if (triggers.size() > 0 && m_logger.isVerbose()) {
+                if (triggers.size() > 1)
+                    m_logger.printfln("Added routes for %d triggers", triggers.size());
+                else
+                    m_logger.printfln("Added route for %d trigger", triggers.size());
+            }
+
             for (final TriggerDescriptor trigger : triggers) {
 
                 final String kafkaUri = String.format("kafka:%s?brokers=%s", trigger.getTriggerId(),
@@ -39,7 +46,11 @@ public class TriggerDaemon {
                         "jt400://%s:%s@%s/qsys.lib/%s.lib/%s.dtaq?keyed=false&format=binary&guiAvailable=false",
                         username, password, hostname, trigger.getLibrary(), trigger.getTriggerId());
 
-                context.addRoutes(new RouteBuilder() {
+                if (m_logger.isVerbose()) {
+                    m_logger.printfln("%s --> %s", dtaqUri, kafkaUri);
+                }
+                
+               context.addRoutes(new RouteBuilder() {
                     @Override
                     public void configure() {
                         from(dtaqUri)
