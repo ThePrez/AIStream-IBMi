@@ -14,34 +14,33 @@ import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
 
 public class TriggerCLI {
 
-    private enum CLIActions {
+    enum CLIActions {
         /** List the tables currently being monitored */
-        LIST(false),
+        LIST(false, false),
         /** Add the table to monitoring */
-        ADD(true),
+        ADD(true, false),
         /** Get monitoring details for the table */
-        GET(true),
+        GET(true, false),
         /** Remove the table from monitoring */
-        REMOVE(true),
+        REMOVE(true, false),
         /** Start the router job */
-        DAEMONSTART(false);
+        DAEMONSTART(false, true);
 
-        public boolean m_isTableAndSchemaRequired;
-
-        CLIActions(boolean _b) {
-            m_isTableAndSchemaRequired = _b;
+        private final boolean m_isTableAndSchemaRequired;
+        private final boolean m_isKafkaBrokerRequired;
+        CLIActions(boolean bTableAndSchema, boolean bKafkaBroker) {
+            m_isTableAndSchemaRequired = bTableAndSchema;
+            m_isKafkaBrokerRequired = bKafkaBroker;
         }
-
         boolean isTableAndSchemaRequired() {
             return m_isTableAndSchemaRequired;
+        }
+        boolean isKafkaBrokerRequired() {
+            return m_isKafkaBrokerRequired;
         }
     }
 
     public static void main(String[] _args) {
-        // TODO The library where the triggers, variables, and data queues are saved
-        // needs to be configurable
-        final String LIBRARY = "triggerman";
-
         LinkedList<String> argsList = new LinkedList<>(Arrays.asList(_args));
         AppLogger logger = AppLogger.getSingleton(argsList.remove("-v"));
 
@@ -97,10 +96,24 @@ public class TriggerCLI {
         if (!isInputOk) {
             System.exit(19);
         }
+
+        TriggerConfigurationFile configFile = TriggerConfigurationFile.getDefault(logger);
+        if (configFile == null) {
+            logger.println_err("Error: AIStream configuration file is not found.");
+            System.exit(19);
+        }
+        else if (!configFile.validate(action)) {
+            logger.println_err("Error: Invalid content in AIStream configuration file.");
+            System.exit(19);
+        }
+
+        // The library where the triggers, variables, and data queues are saved
+        final String triggermanLibrary = configFile.getTriggerManagerLibrary();
+
         try (AS400 as400 = IBMiDotEnv.getCachedSystemConnection(true)) {
-            SelfInstaller installer = new SelfInstaller(logger, as400, LIBRARY);
+            SelfInstaller installer = new SelfInstaller(logger, as400, triggermanLibrary);
             installer.install();
-            TriggerManager tMan = new TriggerManager(logger, as400, LIBRARY);
+            TriggerManager tMan = new TriggerManager(logger, as400, triggermanLibrary);
             // tMan.createTrigger("JES", "simple");
             switch (action) {
                 case ADD:
