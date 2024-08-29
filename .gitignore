@@ -22,3 +22,4 @@ dev.env
 .vscode/launch.json
 .env
 .vscode/settings.json
+aistream.conf
