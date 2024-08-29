@@ -31,7 +31,7 @@ public class TriggerDaemon {
             for (final TriggerDescriptor trigger : triggers) {
 
                 final String kafkaUri = String.format("kafka:%s?brokers=%s", trigger.getTriggerId(),
-                        "<hostname>:9092"); // TODO: pull broker from config
+                    TriggerConfigurationFile.getDefault(m_logger).getKafkaBrokerUri()); 
                 final String password = IBMiDotEnv.getDotEnv().get("IBMI_PASSWORD", "*CURRENT");
                 final String username = IBMiDotEnv.getDotEnv().get("IBMI_USERNAME", "*CURRENT");
                 final String hostname = IBMiDotEnv.getDotEnv().get("IBMI_HOSTNAME", "localhost");
