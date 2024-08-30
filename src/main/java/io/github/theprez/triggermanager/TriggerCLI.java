@@ -112,7 +112,6 @@ public class TriggerCLI {
             SelfInstaller installer = new SelfInstaller(logger, as400, triggermanLibrary);
             installer.install();
             TriggerManager tMan = new TriggerManager(logger, as400, triggermanLibrary);
-            // tMan.createTrigger("JES", "simple");
             switch (action) {
                 case ADD:
                     TriggerDescriptor newTrigger = tMan.createTrigger(schema, table);
@@ -148,6 +147,8 @@ public class TriggerCLI {
                     }
             }
 
+            // TODO move to test suite
+            // tMan.createTrigger("JES", "simple");
             // TriggerDescriptor deleted = tMan.deleteTriggerFromTable("jesseg", "simple");
             // if (null != deleted) {
             // logger.println_success("Trigger deleted: " + deleted);
