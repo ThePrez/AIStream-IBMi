@@ -4,7 +4,6 @@ import java.io.IOException;
 import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
-import java.sql.ResultSetMetaData;
 import java.sql.SQLException;
 import java.sql.Statement;
 import java.util.LinkedList;
@@ -103,7 +102,7 @@ public class TriggerManager {
     public List<TriggerDescriptor> listTriggers() throws SQLException {
         LinkedList<TriggerDescriptor> ret = new LinkedList<>();
         try (PreparedStatement stmt = m_conn.prepareStatement(
-                "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from qsys2.systriggers where TRIGGER_SCHEMA = ?")) {
+                "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from QSYS2.SYSTRIGGERS where TRIGGER_SCHEMA = ?")) {
             stmt.setString(1, m_dq_library);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
@@ -118,7 +117,7 @@ public class TriggerManager {
 
     public TriggerDescriptor getExistingTriggerForTable(String _schema, String _table) throws SQLException {
         try (PreparedStatement stmt = m_conn.prepareStatement(
-                "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from qsys2.systriggers where TRIGGER_SCHEMA = ? AND EVENT_OBJECT_SCHEMA like ? AND EVENT_OBJECT_TABLE like ?")) {
+                "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from QSYS2.SYSTRIGGERS where TRIGGER_SCHEMA = ? AND EVENT_OBJECT_SCHEMA like ? AND EVENT_OBJECT_TABLE like ?")) {
             stmt.setString(1, m_dq_library);
             // TODO the schema and table name could be delimited, so the query values need to be set accordingly
             stmt.setString(2, _schema);
@@ -142,13 +141,16 @@ public class TriggerManager {
 
     private String getColumnData(String _srcLib, String _srcTable) throws SQLException {
         final StringJoiner sjColumnData = new StringJoiner(",\n");
-        // TODO Why not just query SYSCOLUMNS for the details?  Note that SELECT * will not include any hidden columns
+        // Query the SYSCOLUMNS catalog to get the column data for the specified table.
+        // This ensures that implicitly hidden columns are included, where using the
+        // ResultSetMetaData from a `SELECT * FROM x` query they would not be.
         try (PreparedStatement stmt = m_conn
-                .prepareStatement(String.format("select * from %s.%s limit 1", _srcLib, _srcTable))) { // TODO: mitigate SQL injection
-            ResultSetMetaData metaData = stmt.getMetaData();
-            int columnCount = metaData.getColumnCount();
-            for (int i = 1; i <= columnCount; ++i) {
-                String columnName = metaData.getColumnName(i);
+                .prepareStatement("select QSYS2.DELIMIT_NAME(column_name) from QSYS2.SYSCOLUMNS where table_schema = ? and table_name = ? order by ordinal_position")) {
+                    stmt.setString(1, _srcLib);
+                    stmt.setString(2, _srcTable);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                String columnName = rs.getString(1);
                 sjColumnData.add(String.format("            KEY '%s' VALUE n.%s", columnName, columnName));
             }
         }
@@ -157,7 +159,7 @@ public class TriggerManager {
 
     private boolean doesTriggerExistWithId(String _triggerId) throws SQLException {
         try (PreparedStatement stmt = m_conn.prepareStatement(
-                "select count(TRIGGER_NAME) from qsys2.systriggers where TRIGGER_SCHEMA = ? and TRIGGER_NAME like ?")) {
+                "select count(TRIGGER_NAME) from QSYS2.SYSTRIGGERS where TRIGGER_SCHEMA = ? and TRIGGER_NAME like ?")) {
             stmt.setString(1, m_dq_library);
             stmt.setString(2, _triggerId);
             ResultSet rs = stmt.executeQuery();

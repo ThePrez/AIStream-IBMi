@@ -60,10 +60,10 @@ public class TriggerCLI {
                         action = CLIActions.valueOf(argsList.removeFirst().trim().toUpperCase());
                         break;
                     case "--schema":
-                        schema = argsList.removeFirst();
+                        schema = argsList.removeFirst().trim().toUpperCase(); // TODO Until we add support for delimited names (Issue #6), roll to uppercase
                         break;
                     case "--table":
-                        table = argsList.removeFirst();
+                        table = argsList.removeFirst().trim().toUpperCase(); // TODO Until we add support for delimited names  (Issue #6), roll to uppercase
                         break;
                     default:
                         logger.printfln_err("Unrecognized argument: '%s'", currentArg);
