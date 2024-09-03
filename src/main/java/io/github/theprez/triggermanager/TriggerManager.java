@@ -73,7 +73,7 @@ public class TriggerManager {
         // Create the data queue
         // TODO is it really necessary to attempt the delete first?  the triggerId should be unique, so we should *never* encounter an existing data queue by that name
         String deleteDqCmd = String.format("QSYS/DLTDTAQ DTAQ(%s/%s) ", m_dq_library, triggerId);
-        m_clCommandExecutor.executeAndIgnoreErrors(m_logger, deleteDqCmd);
+        m_clCommandExecutor.executeAndIgnoreErrors(deleteDqCmd);
         String createDqCmd = String.format(
                 "QSYS/CRTDTAQ DTAQ(%s/%s) MAXLEN(64512) SENDERID(*YES) SIZE(*MAX2GB) AUTORCL(*YES) TEXT('AI Stream Monitoring')", m_dq_library,
                 triggerId);
