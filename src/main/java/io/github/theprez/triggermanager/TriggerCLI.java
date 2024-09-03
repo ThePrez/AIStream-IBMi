@@ -45,7 +45,6 @@ public final class TriggerCLI {
     }
 
     public static void main(String[] _args) {
-        // TODO document how delimited names must be specified --action add --schemaName \"\"\"Schema with delimited name\"\" --tableName \"\"\"Table with delimited name\"\"
         LinkedList<String> argsList = new LinkedList<>(Arrays.asList(_args));
         AppLogger logger = AppLogger.getSingleton(argsList.remove("-v"));
 
