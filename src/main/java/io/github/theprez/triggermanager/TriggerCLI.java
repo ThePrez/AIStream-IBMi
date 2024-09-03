@@ -4,7 +4,6 @@ import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Objects;
 
 import com.github.theprez.jcmdutils.AppLogger;
 import com.github.theprez.jcmdutils.StringUtils;
@@ -12,7 +11,12 @@ import com.ibm.as400.access.AS400;
 
 import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
 
-public class TriggerCLI {
+public final class TriggerCLI {
+static AppLogger logger;
+
+    private TriggerCLI() {
+        // No instances, utility class consisting of static methods and variables
+    }
 
     enum CLIActions {
         /** List the tables currently being monitored */
@@ -41,14 +45,19 @@ public class TriggerCLI {
     }
 
     public static void main(String[] _args) {
+        // TODO document how delimited names must be specified --action add --schemaName \"\"\"Schema with delimited name\"\" --tableName \"\"\"Table with delimited name\"\"
         LinkedList<String> argsList = new LinkedList<>(Arrays.asList(_args));
         AppLogger logger = AppLogger.getSingleton(argsList.remove("-v"));
 
         if (argsList.isEmpty()) {
+            // TODO print out the CLI instructions or point the user to the README
             logger.println_err("ERROR: input arguments are required");
             System.exit(17);
         }
 
+        ///////////////////////////////////////////////
+        // Scrape the command line arguments
+        ///////////////////////////////////////////////
         CLIActions action = null;
         String schema = null;
         String table = null;
@@ -77,7 +86,7 @@ public class TriggerCLI {
 
         // validate inputs
         boolean isInputOk = true;
-        if (Objects.isNull(action)) {
+        if (action == null) {
             logger.println_err("ERROR: No action specified");
             isInputOk = false;
         } else if (action.isTableAndSchemaRequired()) {
@@ -97,11 +106,11 @@ public class TriggerCLI {
 
         TriggerConfigurationFile configFile = TriggerConfigurationFile.getInstance(logger);
         if (configFile == null) {
-            logger.println_err("Error: AIStream configuration file is not found.");
+            logger.println_err("ERROR: AIStream configuration file is not found.");
             System.exit(19);
         }
-        else if (!configFile.validate(action)) {
-            logger.println_err("Error: Invalid content in AIStream configuration file.");
+        if (!configFile.validate(action)) {
+            logger.println_err("ERROR: Invalid content in AIStream configuration file.");
             System.exit(19);
         }
 
@@ -115,12 +124,12 @@ public class TriggerCLI {
             switch (action) {
                 case ADD:
                     TriggerDescriptor newTrigger = tMan.createTrigger(schema, table);
-                    logger.println_success("Trigger added: " + newTrigger);
+                    logger.println_success("Table monitoring started: " + newTrigger);
                     break;
                 case GET:
                     TriggerDescriptor existingTrigger = tMan.getExistingTriggerForTable(schema, table);
                     if (null == existingTrigger) {
-                        logger.println("No triggers installed");
+                        logger.println("No tables currently monitored");
                     } else {
                         logger.println(existingTrigger.toString());
                     }
@@ -128,19 +137,18 @@ public class TriggerCLI {
                 case REMOVE:
                     TriggerDescriptor deletedTrigger = tMan.deleteTriggerFromTable(schema, table);
                     if (null != deletedTrigger) {
-                        logger.println_success("Trigger deleted: " + deletedTrigger);
+                        logger.println_success("Table no longer monitored: " + deletedTrigger);
                     }
                     break;
                 case DAEMONSTART:
-                    TriggerDaemon td = new TriggerDaemon(logger, tMan);
-                    td.start();
+                    new TriggerDaemon(logger, tMan).start();
                     break;
                 case LIST:
                 default:
-                    logger.println("Listing triggers...");
+                    logger.println("Listing...");
                     List<TriggerDescriptor> triggerList = tMan.listTriggers();
                     if (triggerList.isEmpty()) {
-                        logger.println_warn("No triggers installed");
+                        logger.println_warn("No tables currently monitored");
                     }
                     for (TriggerDescriptor l : triggerList) {
                         logger.println("       " + l);
@@ -164,14 +172,14 @@ public class TriggerCLI {
             // }
             // tMan.deleteTriggerFromTable("qiws", "qcustcdt");
         } catch (Exception e) {
-            logger.println_err("Error: "+e.getClass().getSimpleName()+ " -> "+e.getLocalizedMessage());
+            logger.println_err("ERROR: " + e.getClass().getSimpleName() +  " -> " + e.getLocalizedMessage());
             logger.printExceptionStack_verbose(e);
         }
     }
 
     private static String normalizeName(final String name) {
         // If null return an empty string
-        if (Objects.isNull(name)) {
+        if (name == null) {
             return "";
         }
         // If delimited just return it
