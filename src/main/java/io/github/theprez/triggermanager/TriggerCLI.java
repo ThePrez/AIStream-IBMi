@@ -1,5 +1,6 @@
 package io.github.theprez.triggermanager;
 
+import java.sql.Connection;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
@@ -8,12 +9,11 @@ import java.util.NoSuchElementException;
 import com.github.theprez.jcmdutils.AppLogger;
 import com.github.theprez.jcmdutils.StringUtils;
 import com.ibm.as400.access.AS400;
+import com.ibm.as400.access.AS400JDBCDataSource;
 
 import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
 
 public final class TriggerCLI {
-static AppLogger logger;
-
     private TriggerCLI() {
         // No instances, utility class consisting of static methods and variables
     }
@@ -59,8 +59,8 @@ static AppLogger logger;
         // Scrape the command line arguments
         ///////////////////////////////////////////////
         CLIActions action = null;
-        String schema = null;
-        String table = null;
+        String schemaName = null;
+        String tableName = null;
         try {
             while (!argsList.isEmpty()) {
                 String currentArg = argsList.removeFirst();
@@ -69,10 +69,10 @@ static AppLogger logger;
                         action = CLIActions.valueOf(argsList.removeFirst().trim().toUpperCase());
                         break;
                     case "--schema":
-                        schema = normalizeName(argsList.removeFirst());
+                        schemaName = normalizeName(argsList.removeFirst());
                         break;
                     case "--table":
-                        table = normalizeName(argsList.removeFirst());
+                        tableName = normalizeName(argsList.removeFirst());
                         break;
                     default:
                         logger.printfln_err("Unrecognized argument: '%s'", currentArg);
@@ -84,26 +84,23 @@ static AppLogger logger;
             System.exit(17);
         }
 
-        // validate inputs
-        boolean isInputOk = true;
+        ///////////////////////////////////////////////
+        // Validate input
+        ///////////////////////////////////////////////
         if (action == null) {
             logger.println_err("ERROR: No action specified");
-            isInputOk = false;
-        } else if (action.isTableAndSchemaRequired()) {
-            if (StringUtils.isEmpty(table)) {
-                logger.println_err("ERROR: No table specified");
-                isInputOk = false;
-            }
-            if (StringUtils.isEmpty(schema)) {
-                logger.println_err("ERROR: No schema specified");
-                isInputOk = false;
-            }
-        }
-        // TODO need to normalize the schema and table names. If not delimited, convert to uppercase.
-        if (!isInputOk) {
             System.exit(19);
         }
-
+        if (action.isTableAndSchemaRequired()) {
+            if (StringUtils.isEmpty(tableName)) {
+                logger.println_err("ERROR: No table specified");
+                System.exit(19);
+            }
+            if (StringUtils.isEmpty(schemaName)) {
+                logger.println_err("ERROR: No schema specified");
+                System.exit(19);
+            }
+        }
         TriggerConfigurationFile configFile = TriggerConfigurationFile.getInstance(logger);
         if (configFile == null) {
             logger.println_err("ERROR: AIStream configuration file is not found.");
@@ -114,20 +111,30 @@ static AppLogger logger;
             System.exit(19);
         }
 
-        // The library where the triggers, variables, and data queues are saved
-        final String triggermanLibrary = configFile.getTriggerManagerLibrary();
+        ///////////////////////////////////////////////
+        // Validation successful, process the request
+        ///////////////////////////////////////////////
 
-        try (AS400 as400 = IBMiDotEnv.getCachedSystemConnection(true)) {
-            SelfInstaller installer = new SelfInstaller(logger, as400, triggermanLibrary);
-            installer.install();
+        try (AS400 as400 = IBMiDotEnv.getCachedSystemConnection(true);
+             Connection connection = new AS400JDBCDataSource(as400).getConnection()) {
+
+            TableDescriptor table = null;
+            if (action.isTableAndSchemaRequired()) {
+                table = TableDescriptor.lookup(schemaName, tableName, connection);
+                if (table == null) {
+                    logger.println_err("ERROR: Specified table could not found.");
+                    return;
+                }
+            }
+
             TriggerManager tMan = new TriggerManager(as400, connection, logger);
             switch (action) {
                 case ADD:
-                    TriggerDescriptor newTrigger = tMan.createTrigger(schema, table);
+                    TriggerDescriptor newTrigger = tMan.createTrigger(table);
                     logger.println_success("Table monitoring started: " + newTrigger);
                     break;
                 case GET:
-                    TriggerDescriptor existingTrigger = tMan.getExistingTriggerForTable(schema, table);
+                    TriggerDescriptor existingTrigger = tMan.getExistingTriggerForTable(table);
                     if (null == existingTrigger) {
                         logger.println("No tables currently monitored");
                     } else {
@@ -135,7 +142,7 @@ static AppLogger logger;
                     }
                     break;
                 case REMOVE:
-                    TriggerDescriptor deletedTrigger = tMan.deleteTriggerFromTable(schema, table);
+                    TriggerDescriptor deletedTrigger = tMan.deleteTriggerFromTable(table);
                     if (null != deletedTrigger) {
                         logger.println_success("Table no longer monitored: " + deletedTrigger);
                     }
