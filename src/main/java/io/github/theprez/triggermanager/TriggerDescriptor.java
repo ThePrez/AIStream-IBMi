@@ -1,6 +1,6 @@
 package io.github.theprez.triggermanager;
 
-public class TriggerDescriptor {
+class TriggerDescriptor {
     private final String m_library;
     private final String m_triggerId;
     private final String m_sourceSchema;
@@ -16,11 +16,11 @@ public class TriggerDescriptor {
         m_toString = String.format("(%s.%s) -> [%s/%s]", _sourceSchema,_sourceTable, _library, _triggerId);
     }
 
-    public String getLibrary() {
+    String getLibrary() {
         return m_library;
     }
 
-    public String getTriggerId() {
+    String getTriggerId() {
         return m_triggerId;
     }
 

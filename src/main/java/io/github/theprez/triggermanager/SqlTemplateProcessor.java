@@ -19,7 +19,7 @@ final class SqlTemplateProcessor {
         // Utility class consisting of only static methods, no instances
     }
 
-    public static String getProcessed(String _templateName, Properties _values) throws IOException {
+    static String getProcessed(String _templateName, Properties _values) throws IOException {
         final String fileContents = readFile(_templateName);
         String processed = fileContents;
         final Matcher m = REPLACEMENT_PATTERN.matcher(fileContents);
