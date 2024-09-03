@@ -14,6 +14,8 @@ import com.ibm.as400.access.AS400JDBCDataSource;
 import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
 
 public final class TriggerCLI {
+    private static AppLogger logger;
+
     private TriggerCLI() {
         // No instances, utility class consisting of static methods and variables
     }
@@ -46,12 +48,11 @@ public final class TriggerCLI {
 
     public static void main(String[] _args) {
         LinkedList<String> argsList = new LinkedList<>(Arrays.asList(_args));
-        AppLogger logger = AppLogger.getSingleton(argsList.remove("-v"));
+        logger = AppLogger.getSingleton(argsList.remove("-v"));
 
         if (argsList.isEmpty()) {
             // TODO print out the CLI instructions or point the user to the README
-            logger.println_err("ERROR: input arguments are required");
-            System.exit(17);
+            logFatalErrorAndExit("ERROR: input arguments are required");
         }
 
         ///////////////////////////////////////////////
@@ -74,40 +75,33 @@ public final class TriggerCLI {
                         tableName = normalizeName(argsList.removeFirst());
                         break;
                     default:
-                        logger.printfln_err("Unrecognized argument: '%s'", currentArg);
-                        System.exit(19);
+                        logFatalErrorAndExit(String.format("Unrecognized argument: '%s'", currentArg));
+                        break;
                 }
             }
         } catch (NoSuchElementException oops) {
-            logger.println_err("ERROR: malformed input arguments");
-            System.exit(17);
+            logFatalErrorAndExit("ERROR: malformed input arguments");
         }
 
         ///////////////////////////////////////////////
         // Validate input
         ///////////////////////////////////////////////
         if (action == null) {
-            logger.println_err("ERROR: No action specified");
-            System.exit(19);
-        }
-        if (action.isTableAndSchemaRequired()) {
+            logFatalErrorAndExit("ERROR: No action specified");
+            return; // Not necessary at runtime, just makes the IDE happy knowing we aren't dereferencing a null pointer when processing the requested action
+        } else if (action.isTableAndSchemaRequired()) {
             if (StringUtils.isEmpty(tableName)) {
-                logger.println_err("ERROR: No table specified");
-                System.exit(19);
+                logFatalErrorAndExit("ERROR: No table specified");
             }
             if (StringUtils.isEmpty(schemaName)) {
-                logger.println_err("ERROR: No schema specified");
-                System.exit(19);
+                logFatalErrorAndExit("ERROR: No schema specified");
             }
         }
         TriggerConfigurationFile configFile = TriggerConfigurationFile.getInstance(logger);
         if (configFile == null) {
-            logger.println_err("ERROR: AIStream configuration file is not found.");
-            System.exit(19);
-        }
-        if (!configFile.validate(action)) {
-            logger.println_err("ERROR: Invalid content in AIStream configuration file.");
-            System.exit(19);
+            logFatalErrorAndExit("ERROR: AIStream configuration file is not found.");
+        } else if (!configFile.validate(action)) {
+            logFatalErrorAndExit("ERROR: Invalid content in AIStream configuration file.");
         }
 
         ///////////////////////////////////////////////
@@ -194,5 +188,11 @@ public final class TriggerCLI {
         }
         // Otherwise fold to uppercase. The user must explicitly delimit names that require it.
         return name.toUpperCase();
+    }
+
+    private static void logFatalErrorAndExit(final String message) {
+        logger.println_err(message);
+        // Terminate the JVM
+        System.exit(17);
     }
 }
