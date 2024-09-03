@@ -4,6 +4,7 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.StringJoiner;
 import java.util.stream.Stream;
 
 class TableDescriptor {
@@ -45,6 +46,27 @@ class TableDescriptor {
     @Override
     public String toString() {
         return String.format("%s.%s", schema, name);
+    }
+
+    String getColumnData(final Connection m_conn) throws SQLException {
+        final StringJoiner sjColumnData = new StringJoiner(",\n");
+        // Query the SYSCOLUMNS catalog to get the column data for the specified table.
+        // This ensures that implicitly hidden columns are included, where using the
+        // ResultSetMetaData from a `SELECT * FROM x` query they would not be.
+        try (PreparedStatement stmt = m_conn.prepareStatement(
+                "SELECT " +
+                "QSYS2.DELIMIT_NAME(COLUMN_NAME) " +
+                "FROM QSYS2.SYSCOLUMNS " +
+                "WHERE QSYS2.DELIMIT_NAME(TABLE_SCHEMA) = ? AND QSYS2.DELIMIT_NAME(TABLE_NAME) = ? ORDER BY ORDINAL_POSITION")) {
+            stmt.setString(1, schema);
+            stmt.setString(2, name);
+            ResultSet rs = stmt.executeQuery();
+            while (rs.next()) {
+                String columnName = rs.getString(1);
+                sjColumnData.add(String.format("            KEY '%s' VALUE n.%s", columnName, columnName));
+            }
+        }
+        return sjColumnData.toString();
     }
 
     static TableDescriptor lookup(final String _schema, final String _table, final Connection connection) throws SQLException {

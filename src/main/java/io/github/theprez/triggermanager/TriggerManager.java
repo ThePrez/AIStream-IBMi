@@ -10,7 +10,6 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Properties;
-import java.util.StringJoiner;
 import java.util.UUID;
 
 import com.github.theprez.jcmdutils.AppLogger;
@@ -60,7 +59,7 @@ class TriggerManager {
 
         p.setProperty("SOURCE_TABLE", table.getName());
 
-        String columnData = getColumnData(table);
+        String columnData = table.getColumnData(m_conn);
         if (columnData.isEmpty()) {
             throw new IOException("Table lookup failed!");
         }
@@ -159,28 +158,6 @@ class TriggerManager {
         try (Statement stmt = m_conn.createStatement()) {
             stmt.execute(processedSQL);
         }
-    }
-
-    private String getColumnData(final TableDescriptor table) throws SQLException {
-        final StringJoiner sjColumnData = new StringJoiner(",\n");
-        // Query the SYSCOLUMNS catalog to get the column data for the specified table.
-        // This ensures that implicitly hidden columns are included, where using the
-        // ResultSetMetaData from a `SELECT * FROM x` query they would not be.
-        try (PreparedStatement stmt = m_conn
-                .prepareStatement(
-                    "SELECT " +
-                    "QSYS2.DELIMIT_NAME(COLUMN_NAME) " +
-                    "FROM QSYS2.SYSCOLUMNS " +
-                    "WHERE QSYS2.DELIMIT_NAME(TABLE_SCHEMA) = ? AND QSYS2.DELIMIT_NAME(TABLE_NAME) = ? ORDER BY ORDINAL_POSITION")) {
-                    stmt.setString(1, table.getSchema());
-                    stmt.setString(2, table.getName());
-            ResultSet rs = stmt.executeQuery();
-            while (rs.next()) {
-                String columnName = rs.getString(1);
-                sjColumnData.add(String.format("            KEY '%s' VALUE n.%s", columnName, columnName));
-            }
-        }
-        return sjColumnData.toString();
     }
 
     private boolean doesTriggerExistWithId(String _triggerId) throws SQLException {
