@@ -120,7 +120,7 @@ static AppLogger logger;
         try (AS400 as400 = IBMiDotEnv.getCachedSystemConnection(true)) {
             SelfInstaller installer = new SelfInstaller(logger, as400, triggermanLibrary);
             installer.install();
-            TriggerManager tMan = new TriggerManager(logger, as400, triggermanLibrary);
+            TriggerManager tMan = new TriggerManager(as400, connection, logger);
             switch (action) {
                 case ADD:
                     TriggerDescriptor newTrigger = tMan.createTrigger(schema, table);

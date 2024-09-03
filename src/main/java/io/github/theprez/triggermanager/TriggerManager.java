@@ -15,9 +15,9 @@ import java.util.UUID;
 
 import com.github.theprez.jcmdutils.AppLogger;
 import com.ibm.as400.access.AS400;
-import com.ibm.as400.access.AS400JDBCDataSource;
+import com.ibm.as400.access.IFSFile;
 
-public class TriggerManager {
+class TriggerManager {
     private static final String GENERATED_NAME_PREFIX = "AI";
 
     private final String m_dq_library;
@@ -25,18 +25,33 @@ public class TriggerManager {
     private final AppLogger m_logger;
     private final QCmdExc m_clCommandExecutor;
 
-    public TriggerManager(final AppLogger _logger, final AS400 _as400, final String _dq_library) throws SQLException {
+    TriggerManager(final AS400 as400, final Connection _connection, final AppLogger _logger) throws IOException, SQLException {
+        m_conn = _connection;
         m_logger = _logger;
-        m_dq_library = _dq_library.toUpperCase().trim();
-        m_conn = new AS400JDBCDataSource(_as400).getConnection();
         m_clCommandExecutor = new QCmdExc(m_logger, m_conn);
+    
+        // The library where the triggers, variables, and data queues are saved
+        m_dq_library = TriggerConfigurationFile.getInstance(m_logger).getTriggerManagerLibrary();
+        IFSFile checker = new IFSFile(as400, "/qsys.lib/" + m_dq_library + ".lib");
+        if (checker.exists()) {
+            m_logger.printfln_verbose("Library %s already exists", m_dq_library);
+        } else {
+            m_clCommandExecutor.execute("QSYS/CRTLIB " + m_dq_library);
+            // TODO Set appropriate authorities
+            try {
+                m_clCommandExecutor.execute("QSYS/CHGLIB LIB(" + m_dq_library + ") TEXT('AIStream')");
+            } catch (SQLException ex) {
+                // Failed to set the text, oh well
+            }
+        }
     }
 
-    public synchronized TriggerDescriptor createTrigger(String _srcSchema, String _srcTable)
+synchronized TriggerDescriptor createTrigger(String _srcSchema, String _srcTable)
             throws IOException, SQLException {
         TriggerDescriptor existingTrigger = getExistingTriggerForTable(_srcSchema, _srcTable);
+// If there is an existing trigger for the specified table, we're already monitoring it
         if (Objects.nonNull(existingTrigger)) {
-            throw new IOException("Trigger already exists: " + existingTrigger);
+            throw new IOException("Table already monitored: " + existingTrigger);
         }
         String triggerId = getUniqueTriggerName().trim();
         Properties p = new Properties();
@@ -58,8 +73,7 @@ if (columnData.isEmpty()) {
                 processedSQL);
 
         // Create the global variable
-        String createVarSql = String.format("create or replace variable %s.%s clob(64000) ccsid 1208", m_dq_library,
-                triggerId); // TODO: remediate SQL injection
+        String createVarSql = String.format("CREATE OR REPLACE VARIABLE %s.%s CLOB(64000) CCSID 1208", m_dq_library, triggerId); // TODO: remediate SQL injection
         executeSQLInNewStatement(createVarSql);
         // Set the global variable label
         try {
@@ -102,7 +116,7 @@ if (columnData.isEmpty()) {
         return new TriggerDescriptor(m_dq_library, triggerId, _srcSchema, _srcTable);
     }
 
-    public List<TriggerDescriptor> listTriggers() throws SQLException {
+    List<TriggerDescriptor> listTriggers() throws SQLException {
         LinkedList<TriggerDescriptor> ret = new LinkedList<>();
         try (PreparedStatement stmt = m_conn.prepareStatement(
                 "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from QSYS2.SYSTRIGGERS where TRIGGER_SCHEMA = ?")) {
