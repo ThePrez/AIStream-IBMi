@@ -24,6 +24,7 @@ java -jar aistream.jar --action LIST
 # Add a table to monitoring
 java -jar aistream.jar --action ADD --schema AITESTLIB --table AITESTTABLE
 
-# Get monitoring info for specified table.  Note the escpaed double quotes required when specifying a delimited name.
+# Get monitoring info for specified table.
+# Note the escpaed double quotes required when specifying a delimited name.
 java -jar aistream.jar --action GET --schema AITESTLIB --table \"\"\"AI Test Table\"\"\"
 ```
