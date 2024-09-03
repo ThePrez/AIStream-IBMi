@@ -10,7 +10,7 @@ import com.github.theprez.jcmdutils.AppLogger;
 import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
 import io.github.theprez.triggermanager.TriggerCLI.CLIActions;
 
-public class TriggerConfigurationFile implements ITriggerConfigurationConstants {
+class TriggerConfigurationFile implements ITriggerConfigurationConstants {
     // Default value of the trigger manager library
     private static final String DEFAULT_TRIGGER_MANAGER_LIBRARY = "triggerman";
 
@@ -23,7 +23,7 @@ public class TriggerConfigurationFile implements ITriggerConfigurationConstants 
         mLogger = _logger;
     }
 
-    public static TriggerConfigurationFile getDefault(AppLogger _logger) {
+    static TriggerConfigurationFile getInstance(AppLogger _logger) {
         if (Objects.isNull(fInstance)) {
             String configPath = IBMiDotEnv.getDotEnv().get(ENV_AISTREAM_CONFIG_FILE,
                     IBMiDotEnv.isIBMi() ? DEFAULT_CONFIG_PATH : "");
@@ -71,15 +71,15 @@ public class TriggerConfigurationFile implements ITriggerConfigurationConstants 
         return true;
     }
 
-    public String getTriggerManagerLibrary() {
-        return mProperties.getProperty(KEY_TRIGGER_MANAGER_LIBRARY);
+    String getTriggerManagerLibrary() {
+        return mProperties.getProperty(KEY_TRIGGER_MANAGER_LIBRARY).toUpperCase();
     }
 
-    public String getKafkaBrokerUri() {
+    String getKafkaBrokerUri() {
         return mProperties.getProperty(KEY_KAFKA_BROKER_URI);
     }
 
-    public String getProperty(String key) {
+    String getProperty(String key) {
         return mProperties.getProperty(key);
     }
 }
