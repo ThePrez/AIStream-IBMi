@@ -47,6 +47,9 @@ public class TriggerManager {
         p.setProperty("SOURCE_TABLE", _srcTable);
 
         String columnData = getColumnData(_srcSchema, _srcTable);
+if (columnData.isEmpty()) {
+            throw new IOException("Table lookup failed!");
+        }
         p.setProperty("COLUMN_DATA", columnData);
         p.setProperty("COLUMN_DATA_ON_DELETE", columnData.replace(" n.", " o."));
         p.setProperty("DATA_QUEUE_NAME", triggerId);
@@ -178,9 +181,9 @@ public class TriggerManager {
         // drop the trigger and global variable
         try (Statement stmt = m_conn.createStatement()) {
             stmt.execute(
-                    String.format("drop trigger %s.%s", existingTrigger.getLibrary(), existingTrigger.getTriggerId()));
+                    String.format("DROP TRIGGER %s.%s", existingTrigger.getLibrary(), existingTrigger.getTriggerId()));
             stmt.execute(
-                    String.format("drop variable %s.%s", existingTrigger.getLibrary(), existingTrigger.getTriggerId()));
+                    String.format("DROP VARIABLE %s.%s", existingTrigger.getLibrary(), existingTrigger.getTriggerId()));
         }
         // delete the data queue
         m_clCommandExecutor.execute(String.format("QSYS/DLTDTAQ DTAQ(%s/%s)", m_dq_library, existingTrigger.getTriggerId()));
