@@ -10,35 +10,31 @@ import com.github.theprez.jcmdutils.AppLogger;
 
 import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
 
-public class TriggerDaemon {
+class TriggerDaemon {
 
     private final TriggerManager m_triggerManager;
     private final AppLogger m_logger;
 
-    public TriggerDaemon(final AppLogger _logger, final TriggerManager _tMan) {
+    TriggerDaemon(final AppLogger _logger, final TriggerManager _tMan) {
         m_logger = _logger;
         m_triggerManager = _tMan;
-
     }
 
-    public void start() throws Exception {
+    void start() throws Exception {
 
         // Standard for a Camel deployment. Start by getting a CamelContext object.
         try (final CamelContext context = new DefaultCamelContext()) {
             m_logger.println("Apache Camel version " + context.getVersion());
 
             final List<TriggerDescriptor> triggers = m_triggerManager.listTriggers();
-            if (triggers.size() > 0 && m_logger.isVerbose()) {
-                if (triggers.size() > 1)
-                    m_logger.printfln("Added routes for %d triggers", triggers.size());
-                else
-                    m_logger.printfln("Added route for %d trigger", triggers.size());
+            if (!triggers.isEmpty()) {
+                m_logger.printfln_verbose("Adding Kafka routing for %d tables...", triggers.size());
             }
 
             for (final TriggerDescriptor trigger : triggers) {
 
                 final String kafkaUri = String.format("kafka:%s?brokers=%s", trigger.getTriggerId(),
-                    TriggerConfigurationFile.getDefault(m_logger).getKafkaBrokerUri()); 
+                    TriggerConfigurationFile.getInstance(m_logger).getKafkaBrokerUri()); 
                 final String password = IBMiDotEnv.getDotEnv().get("IBMI_PASSWORD", "*CURRENT");
                 final String username = IBMiDotEnv.getDotEnv().get("IBMI_USERNAME", "*CURRENT");
                 final String hostname = IBMiDotEnv.getDotEnv().get("IBMI_HOSTNAME", "localhost");
@@ -46,9 +42,7 @@ public class TriggerDaemon {
                         "jt400://%s:%s@%s/qsys.lib/%s.lib/%s.dtaq?keyed=false&format=binary&guiAvailable=false",
                         username, password, hostname, trigger.getLibrary(), trigger.getTriggerId());
 
-                if (m_logger.isVerbose()) {
-                    m_logger.printfln("%s --> %s", dtaqUri, kafkaUri);
-                }
+                m_logger.printfln_verbose("%s --> %s", dtaqUri, kafkaUri);
                 
                context.addRoutes(new RouteBuilder() {
                     @Override

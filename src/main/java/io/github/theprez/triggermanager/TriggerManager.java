@@ -10,14 +10,13 @@ import java.util.LinkedList;
 import java.util.List;
 import java.util.Objects;
 import java.util.Properties;
-import java.util.StringJoiner;
 import java.util.UUID;
 
 import com.github.theprez.jcmdutils.AppLogger;
 import com.ibm.as400.access.AS400;
-import com.ibm.as400.access.AS400JDBCDataSource;
+import com.ibm.as400.access.IFSFile;
 
-public class TriggerManager {
+class TriggerManager {
     private static final String GENERATED_NAME_PREFIX = "AI";
 
     private final String m_dq_library;
@@ -25,28 +24,45 @@ public class TriggerManager {
     private final AppLogger m_logger;
     private final QCmdExc m_clCommandExecutor;
 
-    public TriggerManager(final AppLogger _logger, final AS400 _as400, final String _dq_library) throws SQLException {
+    TriggerManager(final AS400 as400, final Connection _connection, final AppLogger _logger) throws IOException, SQLException {
+        m_conn = _connection;
         m_logger = _logger;
-        m_dq_library = _dq_library.toUpperCase().trim();
-        m_conn = new AS400JDBCDataSource(_as400).getConnection();
         m_clCommandExecutor = new QCmdExc(m_logger, m_conn);
+
+        // The library where the triggers, variables, and data queues are saved
+        m_dq_library = TriggerConfigurationFile.getInstance(m_logger).getTriggerManagerLibrary();
+        IFSFile checker = new IFSFile(as400, "/qsys.lib/" + m_dq_library + ".lib");
+        if (checker.exists()) {
+            m_logger.printfln_verbose("Library %s already exists", m_dq_library);
+        } else {
+            m_clCommandExecutor.execute("QSYS/CRTLIB " + m_dq_library);
+            // TODO Set appropriate authorities
+            try {
+                m_clCommandExecutor.execute("QSYS/CHGLIB LIB(" + m_dq_library + ") TEXT('AIStream')");
+            } catch (SQLException ex) {
+                // Failed to set the text, oh well
+            }
+        }
     }
 
-    public synchronized TriggerDescriptor createTrigger(String _srcSchema, String _srcTable)
-            throws IOException, SQLException {
-        TriggerDescriptor existingTrigger = getExistingTriggerForTable(_srcSchema, _srcTable);
+    synchronized TriggerDescriptor createTrigger(final TableDescriptor table) throws IOException, SQLException {
+        TriggerDescriptor existingTrigger = getExistingTriggerForTable(table);
+        // If there is an existing trigger for the specified table, we're already monitoring it
         if (Objects.nonNull(existingTrigger)) {
-            throw new IOException("Trigger already exists: " + existingTrigger);
+            throw new IOException("Table already monitored: " + existingTrigger);
         }
         String triggerId = getUniqueTriggerName().trim();
         Properties p = new Properties();
         p.setProperty("LIBRARY", m_dq_library);
         p.setProperty("TRIGGER_NAME", triggerId);
-        p.setProperty("SOURCE_SCHEMA", _srcSchema);
+        p.setProperty("SOURCE_SCHEMA", table.getSchema());
 
-        p.setProperty("SOURCE_TABLE", _srcTable);
+        p.setProperty("SOURCE_TABLE", table.getName());
 
-        String columnData = getColumnData(_srcSchema, _srcTable);
+        String columnData = table.getColumnData(m_conn);
+        if (columnData.isEmpty()) {
+            throw new IOException("Table lookup failed!");
+        }
         p.setProperty("COLUMN_DATA", columnData);
         p.setProperty("COLUMN_DATA_ON_DELETE", columnData.replace(" n.", " o."));
         p.setProperty("DATA_QUEUE_NAME", triggerId);
@@ -55,17 +71,14 @@ public class TriggerManager {
                 processedSQL);
 
         // Create the global variable
-        String createVarSql = String.format("create or replace variable %s.%s clob(64000) ccsid 1208", m_dq_library,
-                triggerId); // TODO: remediate SQL injection
+        String createVarSql = String.format("CREATE OR REPLACE VARIABLE %s.%s CLOB(64000) CCSID 1208", m_dq_library, triggerId); // TODO: remediate SQL injection
         executeSQLInNewStatement(createVarSql);
         // Set the global variable label
         try {
-            executeSQLInNewStatement(String.format(
-                "LABEL ON VARIABLE %s.%s IS 'AI Stream Monitoring - %s.%s'",
+            executeSQLInNewStatement(String.format("LABEL ON VARIABLE %s.%s IS '%s'",
                     m_dq_library,
                     triggerId,
-                    _srcSchema,
-                    _srcTable)); // TODO: remediate SQL injection
+                    table.getLabelText())); // TODO: remediate SQL injection
         } catch (SQLException e) {
             // Failed to set the label, oh well
         }
@@ -73,10 +86,11 @@ public class TriggerManager {
         // Create the data queue
         // TODO is it really necessary to attempt the delete first?  the triggerId should be unique, so we should *never* encounter an existing data queue by that name
         String deleteDqCmd = String.format("QSYS/DLTDTAQ DTAQ(%s/%s) ", m_dq_library, triggerId);
-        m_clCommandExecutor.executeAndIgnoreErrors(m_logger, deleteDqCmd);
-        String createDqCmd = String.format(
-                "QSYS/CRTDTAQ DTAQ(%s/%s) MAXLEN(64512) SENDERID(*YES) SIZE(*MAX2GB) AUTORCL(*YES) TEXT('AI Stream Monitoring')", m_dq_library,
-                triggerId);
+        m_clCommandExecutor.executeAndIgnoreErrors(deleteDqCmd);
+        String createDqCmd = String.format("QSYS/CRTDTAQ DTAQ(%s/%s) MAXLEN(64512) SENDERID(*YES) SIZE(*MAX2GB) AUTORCL(*YES) TEXT('%s')",
+                 m_dq_library,
+                triggerId,
+                table.getLabelText());
         m_clCommandExecutor.execute(createDqCmd);
 
         // Now create the trigger
@@ -86,48 +100,55 @@ public class TriggerManager {
         executeSQLInNewStatement(processedSQL);
         // Set the trigger label
         try {
-            executeSQLInNewStatement(String.format(
-                "LABEL ON TRIGGER %s.%s IS 'AI Stream Monitoring - %s.%s'",
+            executeSQLInNewStatement(String.format("LABEL ON TRIGGER %s.%s IS '%s'",
                     m_dq_library,
                     triggerId,
-                    _srcSchema,
-                    _srcTable)); // TODO: remediate SQL injection
+                    table.getLabelText())); // TODO: remediate SQL injection
         } catch (SQLException e) {
             // Failed to set the label, oh well
         }
 
-        return new TriggerDescriptor(m_dq_library, triggerId, _srcSchema, _srcTable);
+        return new TriggerDescriptor(m_dq_library, triggerId, table);
     }
 
-    public List<TriggerDescriptor> listTriggers() throws SQLException {
+    List<TriggerDescriptor> listTriggers() throws SQLException {
         LinkedList<TriggerDescriptor> ret = new LinkedList<>();
         try (PreparedStatement stmt = m_conn.prepareStatement(
-                "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from QSYS2.SYSTRIGGERS where TRIGGER_SCHEMA = ?")) {
+                "SELECT " + 
+                "TRIGGER_NAME, " +
+                "QSYS2.DELIMIT_NAME(EVENT_OBJECT_SCHEMA), " +
+                "SYSTEM_EVENT_OBJECT_SCHEMA, " +
+                "QSYS2.DELIMIT_NAME(EVENT_OBJECT_TABLE), " +
+                "SYSTEM_EVENT_OBJECT_TABLE " +
+                "FROM QSYS2.SYSTRIGGERS " +
+                "WHERE TRIGGER_SCHEMA = ?" +
+                "ORDER BY QSYS2.DELIMIT_NAME(EVENT_OBJECT_SCHEMA), QSYS2.DELIMIT_NAME(EVENT_OBJECT_TABLE)")) {
             stmt.setString(1, m_dq_library);
             ResultSet rs = stmt.executeQuery();
             while (rs.next()) {
-                String triggerId = rs.getString(1);
-                String sourceSchema = rs.getString(2);
-                String sourceTable = rs.getString(3);
-                ret.add(new TriggerDescriptor(m_dq_library, triggerId, sourceSchema, sourceTable));
+                final String triggerId = rs.getString(1);
+                final String schema = rs.getString(2);
+                final String systemSchema = rs.getString(3);
+                final String table = rs.getString(4);
+                final String systemTable = rs.getString(5);
+                ret.add(new TriggerDescriptor(m_dq_library, triggerId, new TableDescriptor(schema, systemSchema, table, systemTable)));
             }
             return ret;
         }
     }
 
-    public TriggerDescriptor getExistingTriggerForTable(String _schema, String _table) throws SQLException {
+    TriggerDescriptor getExistingTriggerForTable(final TableDescriptor table) throws SQLException {
         try (PreparedStatement stmt = m_conn.prepareStatement(
-                "SELECT TRIGGER_NAME, EVENT_OBJECT_SCHEMA, EVENT_OBJECT_TABLE from QSYS2.SYSTRIGGERS where TRIGGER_SCHEMA = ? AND EVENT_OBJECT_SCHEMA like ? AND EVENT_OBJECT_TABLE like ?")) {
+                "SELECT " +
+                "TRIGGER_NAME " +
+                "FROM QSYS2.SYSTRIGGERS " +
+                "WHERE TRIGGER_SCHEMA = ? AND QSYS2.DELIMIT_NAME(EVENT_OBJECT_SCHEMA) = ? AND QSYS2.DELIMIT_NAME(EVENT_OBJECT_TABLE) = ?")) {
             stmt.setString(1, m_dq_library);
-            // TODO the schema and table name could be delimited, so the query values need to be set accordingly
-            stmt.setString(2, _schema);
-            stmt.setString(3, _table);
+            stmt.setString(2, table.getSchema());
+            stmt.setString(3, table.getName());
             ResultSet rs = stmt.executeQuery();
             if (rs.next()) {
-                String triggerId = rs.getString(1);
-                String sourceSchema = rs.getString(2);
-                String sourceTable = rs.getString(3);
-                return new TriggerDescriptor(m_dq_library, triggerId, sourceSchema, sourceTable);
+                return new TriggerDescriptor(m_dq_library, rs.getString(1), table);
             }
             return null;
         }
@@ -139,27 +160,12 @@ public class TriggerManager {
         }
     }
 
-    private String getColumnData(String _srcLib, String _srcTable) throws SQLException {
-        final StringJoiner sjColumnData = new StringJoiner(",\n");
-        // Query the SYSCOLUMNS catalog to get the column data for the specified table.
-        // This ensures that implicitly hidden columns are included, where using the
-        // ResultSetMetaData from a `SELECT * FROM x` query they would not be.
-        try (PreparedStatement stmt = m_conn
-                .prepareStatement("select QSYS2.DELIMIT_NAME(column_name) from QSYS2.SYSCOLUMNS where table_schema = ? and table_name = ? order by ordinal_position")) {
-                    stmt.setString(1, _srcLib);
-                    stmt.setString(2, _srcTable);
-            ResultSet rs = stmt.executeQuery();
-            while (rs.next()) {
-                String columnName = rs.getString(1);
-                sjColumnData.add(String.format("            KEY '%s' VALUE n.%s", columnName, columnName));
-            }
-        }
-        return sjColumnData.toString();
-    }
-
     private boolean doesTriggerExistWithId(String _triggerId) throws SQLException {
         try (PreparedStatement stmt = m_conn.prepareStatement(
-                "select count(TRIGGER_NAME) from QSYS2.SYSTRIGGERS where TRIGGER_SCHEMA = ? and TRIGGER_NAME like ?")) {
+                "SELECT " +
+                "COUNT(TRIGGER_NAME) " +
+                "FROM QSYS2.SYSTRIGGERS " +
+                "WHERE TRIGGER_SCHEMA = ? AND TRIGGER_NAME = ?")) {
             stmt.setString(1, m_dq_library);
             stmt.setString(2, _triggerId);
             ResultSet rs = stmt.executeQuery();
@@ -168,19 +174,19 @@ public class TriggerManager {
         }
     }
 
-    public TriggerDescriptor deleteTriggerFromTable(final String _schema, final String _table) throws SQLException {
-        TriggerDescriptor existingTrigger = getExistingTriggerForTable(_schema, _table);
+    TriggerDescriptor deleteTriggerFromTable(final TableDescriptor table) throws SQLException {
+        TriggerDescriptor existingTrigger = getExistingTriggerForTable(table);
         if (Objects.isNull(existingTrigger)) {
-            m_logger.printfln_warn("No trigger exists for table %s.%s", _schema, _table);
+            m_logger.printfln_warn("No trigger exists for table %s", table);
             return null;
         }
 
         // drop the trigger and global variable
         try (Statement stmt = m_conn.createStatement()) {
             stmt.execute(
-                    String.format("drop trigger %s.%s", existingTrigger.getLibrary(), existingTrigger.getTriggerId()));
+                    String.format("DROP TRIGGER %s.%s", existingTrigger.getLibrary(), existingTrigger.getTriggerId()));
             stmt.execute(
-                    String.format("drop variable %s.%s", existingTrigger.getLibrary(), existingTrigger.getTriggerId()));
+                    String.format("DROP VARIABLE %s.%s", existingTrigger.getLibrary(), existingTrigger.getTriggerId()));
         }
         // delete the data queue
         m_clCommandExecutor.execute(String.format("QSYS/DLTDTAQ DTAQ(%s/%s)", m_dq_library, existingTrigger.getTriggerId()));

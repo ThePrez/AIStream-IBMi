@@ -1,18 +1,24 @@
 package io.github.theprez.triggermanager;
 
+import java.sql.Connection;
 import java.util.Arrays;
 import java.util.LinkedList;
 import java.util.List;
 import java.util.NoSuchElementException;
-import java.util.Objects;
 
 import com.github.theprez.jcmdutils.AppLogger;
 import com.github.theprez.jcmdutils.StringUtils;
 import com.ibm.as400.access.AS400;
+import com.ibm.as400.access.AS400JDBCDataSource;
 
 import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
 
-public class TriggerCLI {
+public final class TriggerCLI {
+    private static AppLogger logger;
+
+    private TriggerCLI() {
+        // No instances, utility class consisting of static methods and variables
+    }
 
     enum CLIActions {
         /** List the tables currently being monitored */
@@ -42,16 +48,19 @@ public class TriggerCLI {
 
     public static void main(String[] _args) {
         LinkedList<String> argsList = new LinkedList<>(Arrays.asList(_args));
-        AppLogger logger = AppLogger.getSingleton(argsList.remove("-v"));
+        logger = AppLogger.getSingleton(argsList.remove("-v"));
 
         if (argsList.isEmpty()) {
-            logger.println_err("ERROR: input arguments are required");
-            System.exit(17);
+            // TODO print out the CLI instructions or point the user to the README
+            logFatalErrorAndExit("ERROR: input arguments are required");
         }
 
+        ///////////////////////////////////////////////
+        // Scrape the command line arguments
+        ///////////////////////////////////////////////
         CLIActions action = null;
-        String schema = null;
-        String table = null;
+        String schemaName = null;
+        String tableName = null;
         try {
             while (!argsList.isEmpty()) {
                 String currentArg = argsList.removeFirst();
@@ -60,95 +69,94 @@ public class TriggerCLI {
                         action = CLIActions.valueOf(argsList.removeFirst().trim().toUpperCase());
                         break;
                     case "--schema":
-                        schema = argsList.removeFirst().trim().toUpperCase(); // TODO Until we add support for delimited names (Issue #6), roll to uppercase
+                        schemaName = normalizeName(argsList.removeFirst());
                         break;
                     case "--table":
-                        table = argsList.removeFirst().trim().toUpperCase(); // TODO Until we add support for delimited names  (Issue #6), roll to uppercase
+                        tableName = normalizeName(argsList.removeFirst());
                         break;
                     default:
-                        logger.printfln_err("Unrecognized argument: '%s'", currentArg);
-                        System.exit(19);
+                        logFatalErrorAndExit(String.format("Unrecognized argument: '%s'", currentArg));
+                        break;
                 }
             }
         } catch (NoSuchElementException oops) {
-            logger.println_err("ERROR: malformed input arguments");
-            System.exit(17);
+            logFatalErrorAndExit("ERROR: malformed input arguments");
         }
 
-        // validate inputs
-        //
-        boolean isInputOk = true;
-        if (Objects.isNull(action)) {
-            logger.println_err("ERROR: No action specified");
-            isInputOk = false;
+        ///////////////////////////////////////////////
+        // Validate input
+        ///////////////////////////////////////////////
+        if (action == null) {
+            logFatalErrorAndExit("ERROR: No action specified");
+            return; // Not necessary at runtime, just makes the IDE happy knowing we aren't dereferencing a null pointer when processing the requested action
         } else if (action.isTableAndSchemaRequired()) {
-            if (StringUtils.isEmpty(table)) {
-                logger.println_err("ERROR: No table specified");
-                isInputOk = false;
+            if (StringUtils.isEmpty(tableName)) {
+                logFatalErrorAndExit("ERROR: No table specified");
             }
-            if (StringUtils.isEmpty(schema)) {
-                logger.println_err("ERROR: No schema specified");
-                isInputOk = false;
+            if (StringUtils.isEmpty(schemaName)) {
+                logFatalErrorAndExit("ERROR: No schema specified");
             }
         }
-        // TODO need to normalize the schema and table names. If not delimited, convert
-        // to uppercase.
-        if (!isInputOk) {
-            System.exit(19);
-        }
-
-        TriggerConfigurationFile configFile = TriggerConfigurationFile.getDefault(logger);
+        TriggerConfigurationFile configFile = TriggerConfigurationFile.getInstance(logger);
         if (configFile == null) {
-            logger.println_err("Error: AIStream configuration file is not found.");
-            System.exit(19);
-        }
-        else if (!configFile.validate(action)) {
-            logger.println_err("Error: Invalid content in AIStream configuration file.");
-            System.exit(19);
+            logFatalErrorAndExit("ERROR: AIStream configuration file is not found.");
+        } else if (!configFile.validate(action)) {
+            logFatalErrorAndExit("ERROR: Invalid content in AIStream configuration file.");
         }
 
-        // The library where the triggers, variables, and data queues are saved
-        final String triggermanLibrary = configFile.getTriggerManagerLibrary();
+        ///////////////////////////////////////////////
+        // Validation successful, process the request
+        ///////////////////////////////////////////////
 
-        try (AS400 as400 = IBMiDotEnv.getCachedSystemConnection(true)) {
-            SelfInstaller installer = new SelfInstaller(logger, as400, triggermanLibrary);
-            installer.install();
-            TriggerManager tMan = new TriggerManager(logger, as400, triggermanLibrary);
-            // tMan.createTrigger("JES", "simple");
+        try (AS400 as400 = IBMiDotEnv.getCachedSystemConnection(true);
+             Connection connection = new AS400JDBCDataSource(as400).getConnection()) {
+
+            TableDescriptor table = null;
+            if (action.isTableAndSchemaRequired()) {
+                table = TableDescriptor.lookup(schemaName, tableName, connection);
+                if (table == null) {
+                    logger.println_err("ERROR: Specified table could not found.");
+                    return;
+                }
+            }
+
+            TriggerManager tMan = new TriggerManager(as400, connection, logger);
             switch (action) {
                 case ADD:
-                    TriggerDescriptor newTrigger = tMan.createTrigger(schema, table);
-                    logger.println_success("Trigger added: " + newTrigger);
+                    TriggerDescriptor newTrigger = tMan.createTrigger(table);
+                    logger.println_success("Table monitoring started: " + newTrigger);
                     break;
                 case GET:
-                    TriggerDescriptor existingTrigger = tMan.getExistingTriggerForTable(schema, table);
+                    TriggerDescriptor existingTrigger = tMan.getExistingTriggerForTable(table);
                     if (null == existingTrigger) {
-                        logger.println("No triggers installed");
+                        logger.println("No tables currently monitored");
                     } else {
                         logger.println(existingTrigger.toString());
                     }
                     break;
                 case REMOVE:
-                    TriggerDescriptor deletedTrigger = tMan.deleteTriggerFromTable(schema, table);
+                    TriggerDescriptor deletedTrigger = tMan.deleteTriggerFromTable(table);
                     if (null != deletedTrigger) {
-                        logger.println_success("Trigger deleted: " + deletedTrigger);
+                        logger.println_success("Table no longer monitored: " + deletedTrigger);
                     }
                     break;
                 case DAEMONSTART:
-                    TriggerDaemon td = new TriggerDaemon(logger, tMan);
-                    td.start();
+                    new TriggerDaemon(logger, tMan).start();
                     break;
+                case LIST:
                 default:
-                    logger.println("Listing triggers...");
+                    logger.println("Listing...");
                     List<TriggerDescriptor> triggerList = tMan.listTriggers();
                     if (triggerList.isEmpty()) {
-                        logger.println_warn("No triggers installed");
+                        logger.println_warn("No tables currently monitored");
                     }
                     for (TriggerDescriptor l : triggerList) {
                         logger.println("       " + l);
                     }
             }
 
+            // TODO move to test suite
+            // tMan.createTrigger("JES", "simple");
             // TriggerDescriptor deleted = tMan.deleteTriggerFromTable("jesseg", "simple");
             // if (null != deleted) {
             // logger.println_success("Trigger deleted: " + deleted);
@@ -164,8 +172,27 @@ public class TriggerCLI {
             // }
             // tMan.deleteTriggerFromTable("qiws", "qcustcdt");
         } catch (Exception e) {
-            logger.println_err("Error: "+e.getClass().getSimpleName()+ " -> "+e.getLocalizedMessage());
+            logger.println_err("ERROR: " + e.getClass().getSimpleName() +  " -> " + e.getLocalizedMessage());
             logger.printExceptionStack_verbose(e);
         }
+    }
+
+    private static String normalizeName(final String name) {
+        // If null return an empty string
+        if (name == null) {
+            return "";
+        }
+        // If delimited just return it
+        if (name.startsWith("\"") && name.endsWith("\"")) {
+            return name;
+        }
+        // Otherwise fold to uppercase. The user must explicitly delimit names that require it.
+        return name.toUpperCase();
+    }
+
+    private static void logFatalErrorAndExit(final String message) {
+        logger.println_err(message);
+        // Terminate the JVM
+        System.exit(17);
     }
 }

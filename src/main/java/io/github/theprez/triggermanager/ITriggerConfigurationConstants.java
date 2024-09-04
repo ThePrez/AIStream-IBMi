@@ -1,6 +1,6 @@
 package io.github.theprez.triggermanager;
 
-public interface ITriggerConfigurationConstants {
+interface ITriggerConfigurationConstants {
     // The library where the triggers, variables, and data queues are saved
     static final String KEY_TRIGGER_MANAGER_LIBRARY = "TRIGGER_MANAGER_LIBRARY";
 
@@ -12,5 +12,4 @@ public interface ITriggerConfigurationConstants {
 
     // Environment variable to override the path of the AIStream configuration file
     static final String ENV_AISTREAM_CONFIG_FILE = "AISTREAM_CONFIG_FILE";
-
 }
