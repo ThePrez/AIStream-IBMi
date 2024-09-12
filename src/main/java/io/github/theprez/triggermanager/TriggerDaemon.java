@@ -26,6 +26,12 @@ class TriggerDaemon {
         try (final CamelContext context = new DefaultCamelContext()) {
             m_logger.println("Apache Camel version " + context.getVersion());
 
+            final String kafkaBrokerUri = IBMiDotEnv.getDotEnv().get(ITriggerConfigurationConstants.KEY_KAFKA_BROKER_URI);
+            if (kafkaBrokerUri == null) {
+                m_logger.printfln_err("Error: Property is not set in configuration file or environment variable: %s", ITriggerConfigurationConstants.KEY_KAFKA_BROKER_URI);
+                System.exit(17);
+            }
+
             final List<TriggerDescriptor> triggers = m_triggerManager.listTriggers();
             if (!triggers.isEmpty()) {
                 m_logger.printfln_verbose("Adding Kafka routing for %d tables...", triggers.size());
@@ -33,8 +39,7 @@ class TriggerDaemon {
 
             for (final TriggerDescriptor trigger : triggers) {
 
-                final String kafkaUri = String.format("kafka:%s?brokers=%s", trigger.getTriggerId(),
-                    TriggerConfigurationFile.getInstance(m_logger).getKafkaBrokerUri()); 
+                final String kafkaUri = String.format("kafka:%s?brokers=%s", trigger.getTriggerId(), kafkaBrokerUri); 
                 final String password = IBMiDotEnv.getDotEnv().get("IBMI_PASSWORD", "*CURRENT");
                 final String username = IBMiDotEnv.getDotEnv().get("IBMI_USERNAME", "*CURRENT");
                 final String hostname = IBMiDotEnv.getDotEnv().get("IBMI_HOSTNAME", "localhost");
