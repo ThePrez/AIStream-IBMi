@@ -24,13 +24,13 @@ class TriggerManager {
     private final AppLogger m_logger;
     private final QCmdExc m_clCommandExecutor;
 
-    TriggerManager(final AS400 as400, final Connection _connection, final AppLogger _logger) throws IOException, SQLException {
+    TriggerManager(final AS400 as400, final Connection _connection, final String _dq_library, final AppLogger _logger) throws IOException, SQLException {
         m_conn = _connection;
         m_logger = _logger;
         m_clCommandExecutor = new QCmdExc(m_logger, m_conn);
 
         // The library where the triggers, variables, and data queues are saved
-        m_dq_library = TriggerConfigurationFile.getInstance(m_logger).getTriggerManagerLibrary();
+        m_dq_library = _dq_library;
         IFSFile checker = new IFSFile(as400, "/qsys.lib/" + m_dq_library + ".lib");
         if (checker.exists()) {
             m_logger.printfln_verbose("Library %s already exists", m_dq_library);
