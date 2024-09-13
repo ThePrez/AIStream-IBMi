@@ -210,13 +210,13 @@ public final class TriggerCLI {
         return name.toUpperCase();
     }
 
-    private static void logFatalErrorAndExit(final String message) {
+    public static void logFatalErrorAndExit(final String message) {
         logger.println_err(message);
         // Terminate the JVM
         System.exit(17);
     }
 
-    private static void logFatalErrorAndExit(final String format, Object... args) {
+    public static void logFatalErrorAndExit(final String format, Object... args) {
         logger.printfln_err(format, args);
         // Terminate the JVM
         System.exit(17);
