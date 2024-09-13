@@ -28,8 +28,7 @@ class TriggerDaemon {
 
             final String kafkaBrokerUri = IBMiDotEnv.getDotEnv().get(ITriggerConfigurationConstants.KEY_KAFKA_BROKER_URI);
             if (kafkaBrokerUri == null) {
-                m_logger.printfln_err("Error: Property is not set in configuration file or environment variable: %s", ITriggerConfigurationConstants.KEY_KAFKA_BROKER_URI);
-                System.exit(17);
+                TriggerCLI.logFatalErrorAndExit("Error: Property is not set in configuration file or environment variable: %s", ITriggerConfigurationConstants.KEY_KAFKA_BROKER_URI);
             }
 
             final List<TriggerDescriptor> triggers = m_triggerManager.listTriggers();
