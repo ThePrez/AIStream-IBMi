@@ -1,5 +1,6 @@
 package io.github.theprez.triggermanager;
 
+import java.io.File;
 import java.sql.Connection;
 import java.util.Arrays;
 import java.util.LinkedList;
@@ -11,9 +12,11 @@ import com.github.theprez.jcmdutils.StringUtils;
 import com.ibm.as400.access.AS400;
 import com.ibm.as400.access.AS400JDBCDataSource;
 
+import io.github.cdimascio.dotenv.DotenvException;
 import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
 
 public final class TriggerCLI {
+    private static final String DEFAULT_TRIGGER_MANAGER_LIBRARY = "triggerman";
     private static AppLogger logger;
 
     private TriggerCLI() {
@@ -22,27 +25,22 @@ public final class TriggerCLI {
 
     enum CLIActions {
         /** List the tables currently being monitored */
-        LIST(false, false),
+        LIST(false),
         /** Add the table to monitoring */
-        ADD(true, false),
+        ADD(true),
         /** Get monitoring details for the table */
-        GET(true, false),
+        GET(true),
         /** Remove the table from monitoring */
-        REMOVE(true, false),
+        REMOVE(true),
         /** Start the router job */
-        DAEMONSTART(false, true);
+        DAEMONSTART(false);
 
         private final boolean m_isTableAndSchemaRequired;
-        private final boolean m_isKafkaBrokerRequired;
-        CLIActions(boolean bTableAndSchema, boolean bKafkaBroker) {
+        CLIActions(boolean bTableAndSchema) {
             m_isTableAndSchemaRequired = bTableAndSchema;
-            m_isKafkaBrokerRequired = bKafkaBroker;
         }
         boolean isTableAndSchemaRequired() {
             return m_isTableAndSchemaRequired;
-        }
-        boolean isKafkaBrokerRequired() {
-            return m_isKafkaBrokerRequired;
         }
     }
 
@@ -97,11 +95,27 @@ public final class TriggerCLI {
                 logFatalErrorAndExit("ERROR: No schema specified");
             }
         }
-        TriggerConfigurationFile configFile = TriggerConfigurationFile.getInstance(logger);
-        if (configFile == null) {
+
+        // The AIStream configuration file can be specified by the AISTREAM_CONFIG_FILE environment variable,
+        // or is resolved under /QOpenSys/etc/aistream/main.conf if running on IBM i.
+        String configPath = IBMiDotEnv.getDotEnv().get(
+            ITriggerConfigurationConstants.ENV_AISTREAM_CONFIG_FILE,
+            IBMiDotEnv.isIBMi() ? ITriggerConfigurationConstants.DEFAULT_CONFIG_PATH : "");
+        if (StringUtils.isNonEmpty(configPath)) {
+            File configFile = new File(configPath);
+            if (configFile.exists()) {
+                try {
+                    IBMiDotEnv.loadDotEnv(configFile);
+                }
+                catch (DotenvException ex) {
+                    logFatalErrorAndExit(ex.getLocalizedMessage());
+                }
+            }
+            else
+                logFatalErrorAndExit("ERROR: AIStream configuration file is not found: %s", configPath);
+        }
+        else {
             logFatalErrorAndExit("ERROR: AIStream configuration file is not found.");
-        } else if (!configFile.validate(action)) {
-            logFatalErrorAndExit("ERROR: Invalid content in AIStream configuration file.");
         }
 
         ///////////////////////////////////////////////
@@ -120,7 +134,13 @@ public final class TriggerCLI {
                 }
             }
 
-            TriggerManager tMan = new TriggerManager(as400, connection, logger);
+            String dq_library = IBMiDotEnv.getDotEnv().get(ITriggerConfigurationConstants.KEY_TRIGGER_MANAGER_LIBRARY);
+            if (dq_library == null) {
+                logger.printfln_warn("Warning: Property '%s' is not set in configuration file or environment variable. Using default value '%s'.",
+                    ITriggerConfigurationConstants.KEY_TRIGGER_MANAGER_LIBRARY, DEFAULT_TRIGGER_MANAGER_LIBRARY);
+                dq_library = DEFAULT_TRIGGER_MANAGER_LIBRARY;
+            }
+            TriggerManager tMan = new TriggerManager(as400, connection, dq_library.toUpperCase(), logger);
             switch (action) {
                 case ADD:
                     TriggerDescriptor newTrigger = tMan.createTrigger(table);
@@ -190,8 +210,14 @@ public final class TriggerCLI {
         return name.toUpperCase();
     }
 
-    private static void logFatalErrorAndExit(final String message) {
+    public static void logFatalErrorAndExit(final String message) {
         logger.println_err(message);
+        // Terminate the JVM
+        System.exit(17);
+    }
+
+    public static void logFatalErrorAndExit(final String format, Object... args) {
+        logger.printfln_err(format, args);
         // Terminate the JVM
         System.exit(17);
     }
