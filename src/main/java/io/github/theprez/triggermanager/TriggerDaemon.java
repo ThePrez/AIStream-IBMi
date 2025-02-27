@@ -1,5 +1,7 @@
 package io.github.theprez.triggermanager;
 
+import java.io.BufferedReader;
+import java.io.InputStreamReader;
 import java.util.List;
 
 import org.apache.camel.CamelContext;
@@ -10,7 +12,7 @@ import com.github.theprez.jcmdutils.AppLogger;
 
 import io.github.theprez.dotenv_ibmi.IBMiDotEnv;
 
-class TriggerDaemon {
+class TriggerDaemon implements ITriggerConfigurationConstants {
 
     private final TriggerManager m_triggerManager;
     private final AppLogger m_logger;
@@ -69,5 +71,15 @@ class TriggerDaemon {
             Thread.sleep(Long.MAX_VALUE);
             context.stop();
         }
+    }
+
+    void stop() throws Exception {
+        Process process = Runtime.getRuntime().exec(new String[] {STOP_DAEMON_SCRIPT_PATH});
+        BufferedReader br = new BufferedReader(new InputStreamReader(process.getInputStream()));
+        String line;
+        while ((line=br.readLine()) != null) {
+            System.out.println(line);
+        }
+        br.close();
     }
 }
