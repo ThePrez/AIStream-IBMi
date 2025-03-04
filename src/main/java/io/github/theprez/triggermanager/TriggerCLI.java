@@ -33,7 +33,9 @@ public final class TriggerCLI {
         /** Remove the table from monitoring */
         REMOVE(true),
         /** Start the router job */
-        DAEMONSTART(false);
+        DAEMONSTART(false),
+        /** Stop the daemon */
+        DAEMONSTOP(false);
 
         private final boolean m_isTableAndSchemaRequired;
         CLIActions(boolean bTableAndSchema) {
@@ -162,6 +164,9 @@ public final class TriggerCLI {
                     break;
                 case DAEMONSTART:
                     new TriggerDaemon(logger, tMan).start();
+                    break;
+                case DAEMONSTOP:
+                    new TriggerDaemon(logger, tMan).stop();
                     break;
                 case LIST:
                 default:
