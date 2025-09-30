@@ -19,6 +19,10 @@ class TriggerDescriptor {
         return m_triggerId;
     }
 
+    TableDescriptor getTableDescriptor() {
+        return m_table;
+    }
+    
    @Override
    public String toString() {
        return String.format("(%s) -> [%s/%s]", m_table, m_library, m_triggerId);
