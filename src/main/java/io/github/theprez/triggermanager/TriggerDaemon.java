@@ -40,15 +40,24 @@ class TriggerDaemon implements ITriggerConfigurationConstants {
 
             for (final TriggerDescriptor trigger : triggers) {
 
-                final String kafkaUri = String.format("kafka:%s?brokers=%s", trigger.getTriggerId(), kafkaBrokerUri); 
                 final String password = IBMiDotEnv.getDotEnv().get("IBMI_PASSWORD", "*CURRENT");
                 final String username = IBMiDotEnv.getDotEnv().get("IBMI_USERNAME", "*CURRENT");
                 final String hostname = IBMiDotEnv.getDotEnv().get("IBMI_HOSTNAME", "localhost");
+
+                // Create Kafka topic name using hostname, schema name and table name
+                final String topicName = hostname + "_" + trigger.getTableDescriptor().getSchema() 
+                    + "_" + trigger.getTableDescriptor().getName();
+                final String kafkaUri = String.format("kafka:%s?brokers=%s", topicName, kafkaBrokerUri);
+
                 final String dtaqUri = String.format(
                         "jt400://%s:%s@%s/qsys.lib/%s.lib/%s.dtaq?keyed=false&format=binary&guiAvailable=false",
                         username, password, hostname, trigger.getLibrary(), trigger.getTriggerId());
-
-                m_logger.printfln_verbose("%s --> %s", dtaqUri, kafkaUri);
+                
+                // Hide the password in the dtaqUri in verbose mode
+                final String maskedDtaqUri = String.format(
+                    "jt400://%s:%s@%s/qsys.lib/%s.lib/%s.dtaq?keyed=false&format=binary&guiAvailable=false",
+                    username, "xxxxx", hostname, trigger.getLibrary(), trigger.getTriggerId());
+                m_logger.printfln_verbose("%s --> %s", maskedDtaqUri, kafkaUri);
                 
                context.addRoutes(new RouteBuilder() {
                     @Override
